@@ -1,0 +1,97 @@
+{
+  "actor_hidden_activation": "relu",
+  "actor_hiddens": [
+    64,
+    64
+  ],
+  "actor_lr": 0.01,
+  "adv_policy": "maddpg",
+  "batch_mode": "truncate_episodes",
+  "buffer_size": 1000000,
+  "critic_hidden_activation": "relu",
+  "critic_hiddens": [
+    64,
+    64
+  ],
+  "critic_lr": 0.01,
+  "env": "overcooked_multi_agent",
+  "env_config": {
+    "env_params": {
+      "horizon": 400,
+      "mlam_params": {
+        "counter_drop": [],
+        "counter_goals": [],
+        "counter_pickup": [],
+        "same_motion_goals": true,
+        "start_orientations": false,
+        "wait_allowed": false
+      }
+    },
+    "mdp_params": {
+      "layout_name": "cramped_room",
+      "rew_shaping_params": {
+        "DISH_DISP_DISTANCE_REW": 0,
+        "DISH_PICKUP_REWARD": 3,
+        "PLACEMENT_IN_POT_REW": 3,
+        "POT_DISTANCE_REW": 0,
+        "SOUP_DISTANCE_REW": 0,
+        "SOUP_PICKUP_REWARD": 5
+      }
+    },
+    "multi_agent_params": {
+      "bc_schedule": [
+        [
+          0,
+          0
+        ],
+        [
+          Infinity,
+          0
+        ]
+      ],
+      "reward_shaping_factor": 1.0,
+      "reward_shaping_horizon": Infinity,
+      "use_phi": true
+    }
+  },
+  "gamma": 0.95,
+  "good_policy": "maddpg",
+  "horizon": 25,
+  "learning_starts": 25600,
+  "log_level": "ERROR",
+  "multiagent": {
+    "policies": {
+      "policy_1": [
+        null,
+        "Box(0.0, inf, (5, 4, 26), float32)",
+        "Discrete(6)",
+        {
+          "act_space_dict": "Discrete(6)",
+          "agent_id": 1,
+          "obs_space_dict": "Box(0.0, inf, (5, 4, 26), float32)",
+          "use_local_critic": true
+        }
+      ],
+      "policy_2": [
+        null,
+        "Box(0.0, inf, (5, 4, 26), float32)",
+        "Discrete(6)",
+        {
+          "act_space_dict": "Discrete(6)",
+          "agent_id": 2,
+          "obs_space_dict": "Box(0.0, inf, (5, 4, 26), float32)",
+          "use_local_critic": true
+        }
+      ]
+    },
+    "policy_mapping_fn": "<function main.<locals>.<lambda> at 0x7fc6dce97170>"
+  },
+  "n_step": 1,
+  "num_envs_per_worker": 4,
+  "num_gpus": 0,
+  "num_gpus_per_worker": 0,
+  "num_workers": 2,
+  "sample_batch_size": 25,
+  "tau": 0.01,
+  "train_batch_size": 1024
+}

@@ -1,6 +1,5 @@
 # All imports except rllib
 import argparse, os, sys
-from overcooked_ai.src.overcooked_ai_py.agents.benchmarking import AgentEvaluator
 import numpy as np
 
 # environment variable that tells us whether this code is running on the server or not
@@ -8,14 +7,17 @@ LOCAL_TESTING = os.getenv('RUN_ENV', 'production') == 'local'
 
 # Sacred setup (must be before rllib imports)
 from sacred import Experiment
-ex = Experiment("PPO RLLib")
+
+ex = Experiment("MADDPG RLLib")
 
 # Necessary work-around to make sacred pickling compatible with rllib
 from sacred import SETTINGS
+
 SETTINGS.CONFIG.READ_ONLY_CONFIG = False
 
 # Slack notification configuration
 from sacred.observers import SlackObserver
+
 if os.path.exists('slack.json') and not LOCAL_TESTING:
     slack_obs = SlackObserver.from_config('slack.json')
     ex.observers.append(slack_obs)
@@ -29,10 +31,8 @@ if os.path.exists('slack.json') and not LOCAL_TESTING:
 import ray
 from ray.tune.result import DEFAULT_RESULTS_DIR
 from ray.tune.registry import register_env
-from ray.rllib.models import ModelCatalog
-from ray.rllib.agents.ppo.ppo import PPOTrainer
 from human_aware_rl.ppo.ppo_rllib import RllibPPOModel, RllibLSTMPPOModel
-from human_aware_rl.rllib.rllib import OvercookedMultiAgent, save_trainer, gen_trainer_from_params
+from human_aware_rl.rllib.rllib_maddpg import OvercookedMultiAgent, save_trainer, gen_maddpg_trainer_from_params
 from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy, BC_SAVE_DIR
 
 
@@ -40,7 +40,7 @@ from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy,
 #   run the following command in order to train a PPO self-play #
 #   agent with the static parameters listed in my_config        #
 #                                                               #
-#   python ppo_rllib_client.py                                  #
+#   python maddpg_rllib_client.py                                  #
 #                                                               #
 #   In order to view the results of training, run the following #
 #   command                                                     #
@@ -52,8 +52,9 @@ from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy,
 # Dummy wrapper to pass rllib type checks
 def _env_creator(env_config):
     # Re-import required here to work with serialization
-    from human_aware_rl.rllib.rllib import OvercookedMultiAgent 
+    from human_aware_rl.rllib.rllib_maddpg import OvercookedMultiAgent
     return OvercookedMultiAgent.from_config(env_config)
+
 
 @ex.config
 def my_config():
@@ -99,7 +100,7 @@ def my_config():
 
     # Rollout length
     rollout_fragment_length = 400
-    
+
     # Whether all PPO agents should share the same policy network
     shared_policy = True
 
@@ -170,16 +171,6 @@ def my_config():
     # Whether to log training progress and debugging info
     verbose = True
 
-
-    ### BC Params ###
-    # path to pickled policy model for behavior cloning
-    bc_model_dir = os.path.join(BC_SAVE_DIR, "default")
-
-    # Whether bc agents should return action logit argmax or sample
-    bc_stochastic = True
-
-
-
     ### Environment Params ###
     # Which overcooked level to use
     layout_name = "cramped_room"
@@ -196,7 +187,7 @@ def my_config():
         kl_coeff
     )
 
-    experiment_name = "{0}_{1}_{2}".format("PPO", layout_name, params_str)
+    experiment_name = "{0}_{1}_{2}".format("MADDPG", layout_name, params_str)
 
     # Rewards the agent will receive for intermediate actions
     rew_shaping_params = {
@@ -217,115 +208,119 @@ def my_config():
     # Linearly anneal the reward shaping factor such that it reaches zero after this number of timesteps
     reward_shaping_horizon = float('inf')
 
-    # bc_factor represents that ppo agent gets paired with a bc agent for any episode
-    # schedule for bc_factor is represented by a list of points (t_i, v_i) where v_i represents the 
-    # value of bc_factor at timestep t_i. Values are linearly interpolated between points
-    # The default listed below represents bc_factor=0 for all timesteps
-    bc_schedule = OvercookedMultiAgent.self_play_bc_schedule
-
     # TODO! Custom model -> should not be the case for us
     # To be passed into rl-lib model/custom_options config
     model_params = {
-        "use_lstm" : use_lstm,
-        "NUM_HIDDEN_LAYERS" : NUM_HIDDEN_LAYERS,
-        "SIZE_HIDDEN_LAYERS" : SIZE_HIDDEN_LAYERS,
-        "NUM_FILTERS" : NUM_FILTERS,
-        "NUM_CONV_LAYERS" : NUM_CONV_LAYERS,
-        "CELL_SIZE" : CELL_SIZE,
+        "use_lstm": use_lstm,
+        "NUM_HIDDEN_LAYERS": NUM_HIDDEN_LAYERS,
+        "SIZE_HIDDEN_LAYERS": SIZE_HIDDEN_LAYERS,
+        "NUM_FILTERS": NUM_FILTERS,
+        "NUM_CONV_LAYERS": NUM_CONV_LAYERS,
+        "CELL_SIZE": CELL_SIZE,
         "D2RL": D2RL
     }
 
     # TODO! What training params to we need to MADDPG?
     # to be passed into the rllib.PPOTrainer class
     training_params = {
-        "num_workers" : num_workers,
-        "train_batch_size" : train_batch_size,
-        "sgd_minibatch_size" : sgd_minibatch_size,
-        "rollout_fragment_length" : rollout_fragment_length,
-        "num_sgd_iter" : num_sgd_iter,
-        "lr" : lr,
-        "lr_schedule" : lr_schedule,
-        "grad_clip" : grad_clip,
-        "gamma" : gamma,
-        "lambda" : lmbda,
-        "vf_share_layers" : vf_share_layers,
-        "vf_loss_coeff" : vf_loss_coeff,
-        "kl_coeff" : kl_coeff,
-        "clip_param" : clip_param,
-        "num_gpus" : num_gpus,
-        "seed" : seed,
-        "evaluation_interval" : evaluation_interval,
-        "entropy_coeff_schedule" : [(0, entropy_coeff_start), (entropy_coeff_horizon, entropy_coeff_end)],
-        "eager" : eager,
-        "log_level" : "WARN" if verbose else "ERROR"
+        "num_workers": num_workers,
+        "train_batch_size": train_batch_size,
+        "sgd_minibatch_size": sgd_minibatch_size,
+        "rollout_fragment_length": rollout_fragment_length,
+        "num_sgd_iter": num_sgd_iter,
+        "lr": lr,
+        "lr_schedule": lr_schedule,
+        "grad_clip": grad_clip,
+        "gamma": gamma,
+        "lambda": lmbda,
+        "vf_share_layers": vf_share_layers,
+        "vf_loss_coeff": vf_loss_coeff,
+        "kl_coeff": kl_coeff,
+        "clip_param": clip_param,
+        "num_gpus": num_gpus,
+        "seed": seed,
+        "evaluation_interval": evaluation_interval,
+        "entropy_coeff_schedule": [(0, entropy_coeff_start), (entropy_coeff_horizon, entropy_coeff_end)],
+        "eager": eager,
+        "log_level": "WARN" if verbose else "ERROR"
     }
 
     # To be passed into AgentEvaluator constructor and _evaluate function
     evaluation_params = {
-        "ep_length" : evaluation_ep_length,
-        "num_games" : evaluation_num_games,
-        "display" : evaluation_display
+        "ep_length": evaluation_ep_length,
+        "num_games": evaluation_num_games,
+        "display": evaluation_display
     }
 
+    bc_schedule = OvercookedMultiAgent.self_play_bc_schedule
 
     environment_params = {
         # To be passed into OvercookedGridWorld constructor
 
-        "mdp_params" : {
+        "mdp_params": {
             "layout_name": layout_name,
             "rew_shaping_params": rew_shaping_params
         },
         # To be passed into OvercookedEnv constructor
-        "env_params" : {
-            "horizon" : horizon
+        "env_params": {
+            "horizon": horizon
         },
 
         # To be passed into OvercookedMultiAgent constructor
-        "multi_agent_params" : {
-            "reward_shaping_factor" : reward_shaping_factor,
-            "reward_shaping_horizon" : reward_shaping_horizon,
-            "use_phi" : use_phi,
-            "bc_schedule" : bc_schedule
-        }
-    }
-
-    bc_params = {
-        "bc_policy_cls" : BehaviorCloningPolicy,
-        "bc_config" : {
-            "model_dir" : bc_model_dir,
-            "stochastic" : bc_stochastic,
-            "eager" : eager
+        "multi_agent_params": {
+            "reward_shaping_factor": reward_shaping_factor,
+            "reward_shaping_horizon": reward_shaping_horizon,
+            "use_phi": use_phi,
+            "bc_schedule": bc_schedule,
         }
     }
 
     # TODO? is this where they enforce the usage of their PPO instead of the library one?
     ray_params = {
-        "custom_model_id" : "MyPPOModel",
-        "custom_model_cls" : RllibLSTMPPOModel if model_params['use_lstm'] else RllibPPOModel,
-        "temp_dir" : temp_dir,
-        "env_creator" : _env_creator
+        "custom_model_id": "MyPPOModel",
+        "custom_model_cls": RllibLSTMPPOModel if model_params['use_lstm'] else RllibPPOModel,
+        "temp_dir": temp_dir,
+        "env_creator": _env_creator
+    }
+
+    ### BC Params ###
+    # path to pickled policy model for behavior cloning
+    bc_model_dir = os.path.join(BC_SAVE_DIR, "default")
+
+    # Whether bc agents should return action logit argmax or sample
+    bc_stochastic = True
+
+    bc_schedule = OvercookedMultiAgent.self_play_bc_schedule
+
+    bc_params = {
+        "bc_policy_cls": BehaviorCloningPolicy,
+        "bc_config": {
+            "model_dir": bc_model_dir,
+            "stochastic": bc_stochastic,
+            "eager": eager
+        }
     }
 
     params = {
-        "model_params" : model_params,
-        "training_params" : training_params,
-        "environment_params" : environment_params,
-        "bc_params" : bc_params,
-        "shared_policy" : shared_policy,
-        "num_training_iters" : num_training_iters,
-        "evaluation_params" : evaluation_params,
-        "experiment_name" : experiment_name,
-        "save_every" : save_freq,
-        "seeds" : seeds,
-        "results_dir" : results_dir,
-        "ray_params" : ray_params,
-        "verbose" : verbose
+        "model_params": model_params,
+        "training_params": training_params,
+        "environment_params": environment_params,
+        "bc_params": bc_params,
+        "shared_policy": shared_policy,
+        "num_training_iters": num_training_iters,
+        "evaluation_params": evaluation_params,
+        "experiment_name": experiment_name,
+        "save_every": save_freq,
+        "seeds": seeds,
+        "results_dir": results_dir,
+        "ray_params": ray_params,
+        "verbose": verbose
     }
 
 
 def run(params):
     # Retrieve the tune.Trainable object that is used for the experiment
-    trainer = gen_trainer_from_params(params)
+    trainer = gen_maddpg_trainer_from_params(params)
 
     # Object to store training results in
     result = {}
@@ -368,6 +363,6 @@ def main(params):
         results.append(result)
 
     # Return value gets sent to our slack observer for notification
-    average_sparse_reward = np.mean([res['custom_metrics']['sparse_reward_mean'] for res in results])
-    average_episode_reward = np.mean([res['episode_reward_mean'] for res in results])
-    return { "average_sparse_reward" : average_sparse_reward, "average_total_reward" : average_episode_reward }
+    # average_sparse_reward = np.mean([res['custom_metrics']['sparse_reward_mean'] for res in results])
+    # average_episode_reward = np.mean([res['episode_reward_mean'] for res in results])
+    # return {"average_sparse_reward": average_sparse_reward, "average_total_reward": average_episode_reward}

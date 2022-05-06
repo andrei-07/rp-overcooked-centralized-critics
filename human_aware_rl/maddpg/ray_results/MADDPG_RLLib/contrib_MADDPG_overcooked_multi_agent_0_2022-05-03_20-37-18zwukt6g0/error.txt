@@ -1,0 +1,65 @@
+Failure # 1 (occurred at 2022-05-03_20-37-23)
+Traceback (most recent call last):
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/ray/tune/trial_runner.py", line 467, in _process_trial
+    result = self.trial_executor.fetch_result(trial)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/ray/tune/ray_trial_executor.py", line 431, in fetch_result
+    result = ray.get(trial_future[0], DEFAULT_GET_TIMEOUT)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/ray/worker.py", line 1515, in get
+    raise value.as_instanceof_cause()
+ray.exceptions.RayTaskError(ValueError): [36mray::MADDPG.train()[39m (pid=71647, ip=192.168.0.173)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/tensorflow_core/python/framework/ops.py", line 1610, in _create_c_op
+    c_op = c_api.TF_FinishOperation(op_desc)
+tensorflow.python.framework.errors_impl.InvalidArgumentError: Shape must be rank 4 but is rank 2 for 'policy_1/critic/concat' (op: 'ConcatV2') with input shapes: [?,5,4,26], [?,6], [].
+
+During handling of the above exception, another exception occurred:
+
+[36mray::MADDPG.train()[39m (pid=71647, ip=192.168.0.173)
+  File "python/ray/_raylet.pyx", line 424, in ray._raylet.execute_task
+  File "python/ray/_raylet.pyx", line 459, in ray._raylet.execute_task
+  File "python/ray/_raylet.pyx", line 462, in ray._raylet.execute_task
+  File "python/ray/_raylet.pyx", line 463, in ray._raylet.execute_task
+  File "python/ray/_raylet.pyx", line 417, in ray._raylet.execute_task.function_executor
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/ray/rllib/agents/trainer_template.py", line 90, in __init__
+    Trainer.__init__(self, config, env, logger_creator)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/ray/rllib/agents/trainer.py", line 448, in __init__
+    super().__init__(config, logger_creator)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/ray/tune/trainable.py", line 174, in __init__
+    self._setup(copy.deepcopy(self.config))
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/ray/rllib/agents/trainer.py", line 591, in _setup
+    self._init(self.config, self.env_creator)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/ray/rllib/agents/trainer_template.py", line 117, in _init
+    self.config["num_workers"])
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/ray/rllib/agents/trainer.py", line 662, in _make_workers
+    logdir=self.logdir)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/ray/rllib/evaluation/worker_set.py", line 61, in __init__
+    RolloutWorker, env_creator, policy, 0, self._local_config)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/ray/rllib/evaluation/worker_set.py", line 279, in _make_worker
+    extra_python_environs=extra_python_environs)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/ray/rllib/evaluation/rollout_worker.py", line 376, in __init__
+    self._build_policy_map(policy_dict, policy_config)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/ray/rllib/evaluation/rollout_worker.py", line 859, in _build_policy_map
+    policy_map[name] = cls(obs_space, act_space, merged_conf)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/ray/rllib/contrib/maddpg/maddpg_policy.py", line 123, in __init__
+    scope="critic")
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/ray/rllib/contrib/maddpg/maddpg_policy.py", line 338, in _build_critic_network
+    out = tf.concat(obs_n + act_n, axis=1)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/tensorflow_core/python/util/dispatch.py", line 180, in wrapper
+    return target(*args, **kwargs)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/tensorflow_core/python/ops/array_ops.py", line 1431, in concat
+    return gen_array_ops.concat_v2(values=values, axis=axis, name=name)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/tensorflow_core/python/ops/gen_array_ops.py", line 1257, in concat_v2
+    "ConcatV2", values=values, axis=axis, name=name)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/tensorflow_core/python/framework/op_def_library.py", line 793, in _apply_op_helper
+    op_def=op_def)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/tensorflow_core/python/util/deprecation.py", line 507, in new_func
+    return func(*args, **kwargs)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/tensorflow_core/python/framework/ops.py", line 3360, in create_op
+    attrs, op_def, compute_device)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/tensorflow_core/python/framework/ops.py", line 3429, in _create_op_internal
+    op_def=op_def)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/tensorflow_core/python/framework/ops.py", line 1773, in __init__
+    control_input_ops)
+  File "/Users/andreimija/opt/anaconda3/envs/harl_rllib/lib/python3.7/site-packages/tensorflow_core/python/framework/ops.py", line 1613, in _create_c_op
+    raise ValueError(str(e))
+ValueError: Shape must be rank 4 but is rank 2 for 'policy_1/critic/concat' (op: 'ConcatV2') with input shapes: [?,5,4,26], [?,6], [].
+

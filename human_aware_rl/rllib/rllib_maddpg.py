@@ -9,10 +9,8 @@ from ray.tune.logger import UnifiedLogger
 from ray.tune.result import DEFAULT_RESULTS_DIR
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.agents.callbacks import DefaultCallbacks
-from ray.rllib.agents.ppo.ppo import PPOTrainer
 from ray.rllib.contrib.maddpg.maddpg import MADDPGTrainer
-from ray.rllib.models import ModelCatalog
-from human_aware_rl.rllib.utils import softmax, get_base_ae, get_required_arguments, iterable_equal
+from human_aware_rl.rllib.utils import softmax, get_base_ae, get_required_arguments
 from datetime import datetime
 import tempfile
 import gym
@@ -27,13 +25,14 @@ timestr = datetime.today().strftime("%Y-%m-%d_%H-%M-%S")
 
 
 class RlLibAgent(Agent):
-    """ 
+    """
     Class for wrapping a trained RLLib Policy object into an Overcooked compatible Agent
     We inherit from Overcooked agent to create an agent from RLLib policy that is compatible with our agent.
     Why do we need this? For the following flow:
         - train policy using RLLib
         - make policy into RLLib agent
     """
+
     def __init__(self, policy, agent_index, featurize_fn):
         self.policy = policy
         self.agent_index = agent_index
@@ -68,9 +67,9 @@ class RlLibAgent(Agent):
 
     def action(self, state):
         """
-        Arguments: 
+        Arguments:
             - state (Overcooked_mdp.OvercookedState) object encoding the global view of the environment
-        returns: 
+        returns:
             - the argmax action for a single observation state
             - action_info (dict) that stores action probabilities under 'action_probs' key
         """
@@ -80,13 +79,13 @@ class RlLibAgent(Agent):
 
         # Use Rllib.Policy class to compute action argmax and action probabilities
         [action_idx], rnn_state, info = self.policy.compute_actions(np.array([my_obs]), self.rnn_state)
-        agent_action =  Action.INDEX_TO_ACTION[action_idx]
-        
+        agent_action = Action.INDEX_TO_ACTION[action_idx]
+
         # Softmax in numpy to convert logits to normalized probabilities
         logits = info['action_dist_inputs']
         action_probabilities = softmax(logits)
 
-        agent_action_info = {'action_probs' : action_probabilities}
+        agent_action_info = {'action_probs': action_probabilities}
         self.rnn_state = rnn_state
 
         return agent_action, agent_action_info
@@ -98,52 +97,45 @@ class OvercookedMultiAgent(MultiAgentEnv):
     """
 
     # List of all agent types currently supported
-    supported_agents = ['ppo', 'bc']
+    supported_agents = ['maddpg']
 
-    # TODO? What is a schedule and why do we need it?
     # Default bc_schedule, includes no bc agent at any time
     bc_schedule = self_play_bc_schedule = [(0, 0), (float('inf'), 0)]
 
     # Default environment params used for creation
     DEFAULT_CONFIG = {
-        # TODO this seemes to be realted to Overcooked not to RLLib
         # To be passed into OvercookedGridWorld constructor
-        "mdp_params" : {
-            "layout_name" : "cramped_room",
-            "rew_shaping_params" : {}
+        "mdp_params": {
+            "layout_name": "cramped_room",
+            "rew_shaping_params": {}
         },
         # To be passed into OvercookedEnv constructor
-        "env_params" : {
-            "horizon" : 400
+        "env_params": {
+            "horizon": 400
         },
         # To be passed into OvercookedMultiAgent constructor
-        "multi_agent_params" : {
-            "reward_shaping_factor" : 0.0,
-            "reward_shaping_horizon" : 0,
-            "bc_schedule" : self_play_bc_schedule,
-            "use_phi" : True
+        "multi_agent_params": {
+            "reward_shaping_factor": 0.0,
+            "reward_shaping_horizon": 0,
+            "use_phi": True
         }
     }
 
-    def __init__(self, base_env, reward_shaping_factor=0.0, reward_shaping_horizon=0,
-                            bc_schedule=None, use_phi=True):
+    def __init__(self, base_env, reward_shaping_factor=0.0, reward_shaping_horizon=0, bc_schedule=None, use_phi=True):
         """
         base_env: OvercookedEnv
         reward_shaping_factor (float): Coefficient multiplied by dense reward before adding to sparse reward to determine shaped reward TODO? What is sparse reward vs dense reward? --- dense * rsf + sparse
         reward_shaping_horizon (int): Timestep by which the reward_shaping_factor reaches zero through linear annealing
-        bc_schedule (list[tuple]): List of (t_i, v_i) pairs where v_i represents the value of bc_factor at timestep t_i
-            with linear interpolation in between the t_i
         use_phi (bool): Whether to use 'shaped_r_by_agent' or 'phi_s_prime' - 'phi_s' to determine dense reward TODO? What is phi?
         """
+
         if bc_schedule:
             self.bc_schedule = bc_schedule
         self._validate_schedule(self.bc_schedule)
         self.base_env = base_env
         # since we are not passing featurize_fn in as an argument, we create it here and check its validity
-        # TODO? What is this featurize again?
         self.featurize_fn_map = {
-            "ppo": lambda state: self.base_env.lossless_state_encoding_mdp(state),
-            "bc": lambda state: self.base_env.featurize_state_mdp(state)
+            "maddpg": lambda state: self.base_env.featurize_state_mdp(state),
         }
         self._validate_featurize_fns(self.featurize_fn_map)
         self._initial_reward_shaping_factor = reward_shaping_factor
@@ -151,54 +143,36 @@ class OvercookedMultiAgent(MultiAgentEnv):
         self.reward_shaping_horizon = reward_shaping_horizon
         self.use_phi = use_phi
         self._setup_observation_space()
-        self.action_space = gym.spaces.Discrete(len(Action.ALL_ACTIONS))  # TODO?! How does this action space look like?
+        self.action_space = gym.spaces.Discrete(len(Action.ALL_ACTIONS))
         self.anneal_bc_factor(0)
         self.reset()
 
     def _validate_featurize_fns(self, mapping):
-        assert 'ppo' in mapping, "At least one ppo agent must be specified"
+        assert 'maddpg' in mapping, "At least one maddpg agent must be specified"
         for k, v in mapping.items():
             assert k in self.supported_agents, "Unsuported agent type in featurize mapping {0}".format(k)
             assert callable(v), "Featurize_fn values must be functions"
             assert len(get_required_arguments(v)) == 1, "Featurize_fn value must accept exactly one argument"
 
-    def _validate_schedule(self, schedule):
-        timesteps = [p[0] for p in schedule]
-        values = [p[1] for p in schedule]
-
-        assert len(schedule) >= 2, "Need at least 2 points to linearly interpolate schedule"
-        assert schedule[0][0] == 0, "Schedule must start at timestep 0"
-        assert all([t >=0 for t in timesteps]), "All timesteps in schedule must be non-negative"
-        assert all([v >=0 and v <= 1 for v in values]), "All values in schedule must be between 0 and 1"
-        assert sorted(timesteps) == timesteps, "Timesteps must be in increasing order in schedule"
-
-        # To ensure we flatline after passing last timestep
-        if (schedule[-1][0] < float('inf')):
-            schedule.append((float('inf'), schedule[-1][1]))
-
     def _setup_observation_space(self):
         dummy_state = self.base_env.mdp.get_standard_start_state()
 
-        #ppo observation
-        featurize_fn_ppo = lambda state: self.base_env.lossless_state_encoding_mdp(state) # TODO? So we basically just encode the mdp states?
-        obs_shape = featurize_fn_ppo(dummy_state)[0].shape
-        high = np.ones(obs_shape) * float("inf")
-        low = np.ones(obs_shape) * 0
-        self.ppo_observation_space = gym.spaces.Box(np.float32(low), np.float32(high), dtype=np.float32) # TODO? Why a box? What is it? How does it work? TODO! It is basically the obs_dict but not3 a dict
-
-        # bc observation
-        featurize_fn_bc = lambda state: self.base_env.featurize_state_mdp(state) # TODO? What is the difference when compared to the lossless_state_encoding_mdp version?
+        # maddpg observation (same as bc)
+        featurize_fn_bc = lambda state: self.base_env.featurize_state_mdp(state)
         obs_shape = featurize_fn_bc(dummy_state)[0].shape
         high = np.ones(obs_shape) * 100
         low = np.ones(obs_shape) * -100
         self.bc_observation_space = gym.spaces.Box(np.float32(low), np.float32(high), dtype=np.float32)
 
     def _get_featurize_fn(self, agent_id):
-        if agent_id.startswith('ppo'):
-            return lambda state: self.base_env.lossless_state_encoding_mdp(state)
-        if agent_id.startswith('bc'):
-            return lambda state: self.base_env.featurize_state_mdp(state)
-        raise ValueError("Unsupported agent type {0}".format(agent_id))
+        return lambda state: self.base_env.featurize_state_mdp(state)
+        # if agent_id.startswith('ppo') or agent_id.startswith('maddpg'):
+        #     return lambda state: self.base_env.lossless_state_encoding_mdp(state)
+        # if agent_id.startswith('maddpg'):
+        #     return lambda state: self.base_env.featurize_state_mdp(state)
+        # raise ValueError("Unsupported agent type {0}".format(agent_id))
+        # return lambda state: self.base_env.lossless_state_encoding_mdp(state)
+        # raise ValueError("Unsupported agent type {0}".format(agent_id))
 
     def _get_obs(self, state):
         ob_p0 = self._get_featurize_fn(self.curr_agents[0])(state)[0]
@@ -206,11 +180,11 @@ class OvercookedMultiAgent(MultiAgentEnv):
         return ob_p0.astype(np.float32), ob_p1.astype(np.float32)
 
     def _populate_agents(self):
-        # Always include at least one ppo agent (i.e. bc_sp not supported for simplicity)
-        agents = ['ppo']
+        # Always include at least one maddpg agent
+        agents = ['maddpg']
 
-        # Coin flip to determine whether other agent should be ppo or bc
-        other_agent = 'bc' if np.random.uniform() < self.bc_factor else 'ppo'
+        # Coin flip to determine whether other agent should be ppo or maddpg
+        other_agent = 'maddpg'  # if np.random.uniform() < 0.5 else 'ppo'
         agents.append(other_agent)
 
         # Randomize starting indices
@@ -242,8 +216,9 @@ class OvercookedMultiAgent(MultiAgentEnv):
             observation: formatted to be standard input for self.agent_idx's policy
         """
         action = [action_dict[self.curr_agents[0]], action_dict[self.curr_agents[1]]]
-        assert all(self.action_space.contains(a) for a in action), "%r (%s) invalid"%(action, type(action))
-        joint_action = [Action.INDEX_TO_ACTION[a] for a in action]
+        actions = [np.argmax(action[0]), np.argmax(action[1])]
+        assert all(self.action_space.contains(a) for a in actions), "%r (%s) invalid" % (actions, type(actions))
+        joint_action = [Action.INDEX_TO_ACTION[a] for a in actions]
         # take a step in the current base environment
 
         if self.use_phi:
@@ -259,10 +234,10 @@ class OvercookedMultiAgent(MultiAgentEnv):
         shaped_reward_p0 = sparse_reward + self.reward_shaping_factor * dense_reward[0]
         shaped_reward_p1 = sparse_reward + self.reward_shaping_factor * dense_reward[1]
 
-        obs = { self.curr_agents[0]: ob_p0, self.curr_agents[1]: ob_p1 }
-        rewards = { self.curr_agents[0]: shaped_reward_p0, self.curr_agents[1]: shaped_reward_p1 }
-        dones = { self.curr_agents[0]: done, self.curr_agents[1]: done, "__all__": done }
-        infos = { self.curr_agents[0]: info, self.curr_agents[1]: info }
+        obs = {self.curr_agents[0]: ob_p0, self.curr_agents[1]: ob_p1}
+        rewards = {self.curr_agents[0]: shaped_reward_p0, self.curr_agents[1]: shaped_reward_p1}
+        dones = {self.curr_agents[0]: done, self.curr_agents[1]: done, "__all__": done}
+        infos = {self.curr_agents[0]: info, self.curr_agents[1]: info}
         return obs, rewards, dones, infos
 
     def reset(self, regen_mdp=True):
@@ -287,28 +262,8 @@ class OvercookedMultiAgent(MultiAgentEnv):
         new_factor = self._anneal(self._initial_reward_shaping_factor, timesteps, self.reward_shaping_horizon)
         self.set_reward_shaping_factor(new_factor)
 
-    def anneal_bc_factor(self, timesteps):
-        """
-        Set the current bc factor such that we anneal linearly until self.bc_factor_horizon
-        timesteps, given that we are currently at timestep "timesteps"
-        """
-        p_0 = self.bc_schedule[0]
-        p_1 = self.bc_schedule[1]
-        i = 2
-        while timesteps > p_1[0] and i < len(self.bc_schedule):
-            p_0 = p_1
-            p_1 = self.bc_schedule[i]
-            i += 1
-        start_t, start_v = p_0
-        end_t, end_v = p_1
-        new_factor = self._anneal(start_v, timesteps, end_t, end_v, start_t)
-        self.set_bc_factor(new_factor)
-
     def set_reward_shaping_factor(self, factor):
         self.reward_shaping_factor = factor
-
-    def set_bc_factor(self, factor):
-        self.bc_factor = factor
 
     def seed(self, seed):
         """
@@ -317,7 +272,6 @@ class OvercookedMultiAgent(MultiAgentEnv):
         # Our environment is already deterministic
         pass
 
-    # TODO! not sure how important this is, need to continue further
     @classmethod
     def from_config(cls, env_config):
         """
@@ -351,6 +305,41 @@ class OvercookedMultiAgent(MultiAgentEnv):
 
         return cls(base_env, **multi_agent_params)
 
+    def _validate_schedule(self, schedule):
+        timesteps = [p[0] for p in schedule]
+        values = [p[1] for p in schedule]
+
+        assert len(schedule) >= 2, "Need at least 2 points to linearly interpolate schedule"
+        assert schedule[0][0] == 0, "Schedule must start at timestep 0"
+        assert all([t >=0 for t in timesteps]), "All timesteps in schedule must be non-negative"
+        assert all([v >=0 and v <= 1 for v in values]), "All values in schedule must be between 0 and 1"
+        assert sorted(timesteps) == timesteps, "Timesteps must be in increasing order in schedule"
+
+        # To ensure we flatline after passing last timestep
+        if (schedule[-1][0] < float('inf')):
+            schedule.append((float('inf'), schedule[-1][1]))
+
+    def set_bc_factor(self, factor):
+        self.bc_factor = factor
+
+    def anneal_bc_factor(self, timesteps):
+        """
+        Set the current bc factor such that we anneal linearly until self.bc_factor_horizon
+        timesteps, given that we are currently at timestep "timesteps"
+        """
+        p_0 = self.bc_schedule[0]
+        p_1 = self.bc_schedule[1]
+        i = 2
+        while timesteps > p_1[0] and i < len(self.bc_schedule):
+            p_0 = p_1
+            p_1 = self.bc_schedule[i]
+            i += 1
+        start_t, start_v = p_0
+        end_t, end_v = p_1
+        new_factor = self._anneal(start_v, timesteps, end_t, end_v, start_t)
+        self.set_bc_factor(new_factor)
+
+
 ##################
 # Training Utils #
 ##################
@@ -373,8 +362,8 @@ class TrainingCallbacks(DefaultCallbacks):
         # Get rllib.OvercookedMultiAgentEnv refernce from rllib wraper
         env = base_env.get_unwrapped()[0]
         # Both agents share the same info so it doesn't matter whose we use, just use 0th agent's
-        info_dict = episode.last_info_for(env.curr_agents[0])
-        print(episode)
+        info_dict = episode.last_info_for(env.curr_agents[1])
+        print(episode.custom_metrics)
         print(info_dict)
         ep_info = info_dict["episode"]
         game_stats = ep_info["ep_game_stats"]
@@ -385,7 +374,6 @@ class TrainingCallbacks(DefaultCallbacks):
         # Parse info dicts generated by OvercookedEnv
         tot_sparse_reward = ep_info["ep_sparse_r"]
         tot_shaped_reward = ep_info["ep_shaped_r"]
-
 
         # Store metrics where they will be visible to rllib for tensorboard logging
         episode.custom_metrics["sparse_reward"] = tot_sparse_reward
@@ -413,11 +401,14 @@ class TrainingCallbacks(DefaultCallbacks):
             lambda ev: ev.foreach_env(
                 lambda env: env.anneal_bc_factor(timestep)))
 
-    def on_postprocess_trajectory(self, worker, episode, agent_id, policy_id, policies, postprocessed_batch, original_batches, **kwargs):
+    def on_postprocess_trajectory(self, worker, episode, agent_id, policy_id, policies, postprocessed_batch,
+                                  original_batches, **kwargs):
         pass
 
+
 # TODO?! Evaluation function basically compute how well the policy performed?
-def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shape, agent_0_policy_str='ppo', agent_1_policy_str='ppo', verbose=False):
+def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shape, agent_0_policy_str='maddpg',
+                            agent_1_policy_str='maddpg', verbose=False):
     """
     Used to "curry" rllib evaluation function by wrapping additional parameters needed in a local scope, and returning a
     function with rllib custom_evaluation_function compatible signature
@@ -450,15 +441,16 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
         if 'bc' in policies:
             base_ae = get_base_ae(eval_mdp_params, env_params)
             base_env = base_ae.env
-            bc_featurize_fn = lambda state : base_env.featurize_state_mdp(state)
+            bc_featurize_fn = lambda state: base_env.featurize_state_mdp(state)
             if policies[0] == 'bc':
                 agent_0_feat_fn = bc_featurize_fn
             if policies[1] == 'bc':
                 agent_1_feat_fn = bc_featurize_fn
 
-        # Compute the evauation rollout. Note this doesn't use the rllib passed in evaluation_workers, so this 
+        # Compute the evauation rollout. Note this doesn't use the rllib passed in evaluation_workers, so this
         # computation all happens on the CPU. Could change this if evaluation becomes a bottleneck
-        results = evaluate(eval_params, eval_mdp_params, outer_shape, agent_0_policy, agent_1_policy, agent_0_feat_fn, agent_1_feat_fn, verbose=verbose)
+        results = evaluate(eval_params, eval_mdp_params, outer_shape, agent_0_policy, agent_1_policy, agent_0_feat_fn,
+                           agent_1_feat_fn, verbose=verbose)
 
         # Log any metrics we care about for rllib tensorboard visualization
         metrics = {}
@@ -468,7 +460,8 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
     return _evaluate
 
 
-def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_policy, agent_0_featurize_fn=None, agent_1_featurize_fn=None, verbose=False):
+def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_policy, agent_0_featurize_fn=None,
+             agent_1_featurize_fn=None, verbose=False):
     """
     Used to visualize rollouts of trained policies
 
@@ -482,7 +475,7 @@ def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_polic
     """
     if verbose:
         print("eval mdp params", mdp_params)
-    evaluator = get_base_ae(mdp_params, {"horizon" : eval_params['ep_length'], "num_mdp":1}, outer_shape)
+    evaluator = get_base_ae(mdp_params, {"horizon": eval_params['ep_length'], "num_mdp": 1}, outer_shape)
 
     # Override pre-processing functions with defaults if necessary
     agent_0_featurize_fn = agent_0_featurize_fn if agent_0_featurize_fn else evaluator.env.lossless_state_encoding_mdp
@@ -511,92 +504,77 @@ def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_polic
 # rllib.Trainer functions #
 ###########################
 
-
-def gen_trainer_from_params(params):
+def gen_maddpg_trainer_from_params(params):
     # All ray environment set-up
     if not ray.is_initialized():
         init_params = {
-            "ignore_reinit_error" : True,
-            "include_webui" : False,
-            "temp_dir" : params['ray_params']['temp_dir'],
-            "log_to_driver" : params['verbose'],
-            "logging_level" : logging.INFO if params['verbose'] else logging.CRITICAL
+            "ignore_reinit_error": True,
+            "include_webui": False,
+            "temp_dir": params['ray_params']['temp_dir'],
+            "log_to_driver": params['verbose'],
+            "logging_level": logging.INFO if params['verbose'] else logging.CRITICAL
         }
         ray.init(**init_params)
     register_env("overcooked_multi_agent", params['ray_params']['env_creator'])
-    # TODO? Do I also need to implement a custom model? Can I use the one they already have since it is with PPO? Where is this actually used
-    ModelCatalog.register_custom_model(params['ray_params']['custom_model_id'], params['ray_params']['custom_model_cls'])
 
     # Parse params TODO! Look at these in more detail
     model_params = params['model_params']
     training_params = params['training_params']
     environment_params = params['environment_params']
     evaluation_params = params['evaluation_params']
-    bc_params = params['bc_params']
     multi_agent_params = params['environment_params']['multi_agent_params']
 
     env = OvercookedMultiAgent.from_config(environment_params)
 
-    # TODO! I can modify this to also accept ddpg. Question is, do we give it a DDPG and make the trainer MADDPG or we write MADDPG directly? If the former is possible, we can just change the type of trainer
     # Returns a properly formatted policy tuple to be passed into ppotrainer config
-    def gen_policy(policy_type="ppo"):
+    def gen_policy(policy_type="maddpg", i=0):
         # supported policy types thus far
-        assert policy_type in ["ppo", "bc"]
-
-        if policy_type == "ppo":
-            config = {
-                "model" : {
-                    "custom_options" : model_params,
-                    # TODO? Just to be clear: Here we specify that, as a model (neural net), we will use the predefined version. Could be helpfu
-                    "custom_model" : "MyPPOModel"
-                }
+        print(policy_type)
+        assert policy_type in ["maddpg"]
+        if policy_type == "maddpg":
+            maddpg_config = {
+                "agent_id": i,
+                "use_local_critic": True
             }
-            return (None, env.ppo_observation_space, env.action_space, config)
-        elif policy_type == "bc":
-            bc_cls = bc_params['bc_policy_cls']
-            bc_config = bc_params['bc_config']
-            return (bc_cls, env.bc_observation_space, env.action_space, bc_config)
+            # TODO?? do we need a different observation space? If so, how do we determine it?
+            return (None, env.bc_observation_space, env.action_space, maddpg_config)
 
     # Rllib compatible way of setting the directory we store agent checkpoints in
     logdir_prefix = "{0}_{1}_{2}".format(params["experiment_name"], params['training_params']['seed'], timestr)
+
     def custom_logger_creator(config):
-                """Creates a Unified logger that stores results in <params['results_dir']>/<params["experiment_name"]>_<seed>_<timestamp>
-                """
-                results_dir = params['results_dir']
-                if not os.path.exists(results_dir):
-                    try:
-                        os.makedirs(results_dir)
-                    except Exception as e:
-                        print("error creating custom logging dir. Falling back to default logdir {}".format(DEFAULT_RESULTS_DIR))
-                        results_dir = DEFAULT_RESULTS_DIR
-                logdir = tempfile.mkdtemp(
-                    prefix=logdir_prefix, dir=results_dir)
-                logger = UnifiedLogger(config, logdir, loggers=None)
-                return logger
+        """Creates a Unified logger that stores results in <params['results_dir']>/<params["experiment_name"]>_<seed>_<timestamp>
+        """
+        results_dir = params['results_dir']
+        if not os.path.exists(results_dir):
+            try:
+                os.makedirs(results_dir)
+            except Exception as e:
+                print(
+                    "error creating custom logging dir. Falling back to default logdir {}".format(DEFAULT_RESULTS_DIR))
+                results_dir = DEFAULT_RESULTS_DIR
+        logdir = tempfile.mkdtemp(
+            prefix=logdir_prefix, dir=results_dir)
+        logger = UnifiedLogger(config, logdir, loggers=None)
+        return logger
 
     # Create rllib compatible multi-agent config based on params
     multi_agent_config = {}
-    all_policies = ['ppo']
+    all_policies = ['maddpg']
 
-    # Whether both agents should be learned
-    self_play = iterable_equal(multi_agent_params['bc_schedule'], OvercookedMultiAgent.self_play_bc_schedule)
-    if not self_play:
-        all_policies.append('bc')
+    # TODO??! Since I changed the thing above to not take PPO anymore -> should I update this to take PPO?
 
-    """
-    TODO? create a new policy for each agent. Actually a new policy for each alg type. Is this the case because PPO will just play with itself so they will have the same policy?
-    Is it the same for MADDPG? In the sense that we only have MADDPG as a policy and all agents have the same policy?
-    """
-    multi_agent_config['policies'] = { policy : gen_policy(policy) for policy in all_policies }
+    multi_agent_config['policies'] = {policy: gen_policy(policy) for idx, policy in enumerate(all_policies)}
+    policies = {policy: gen_policy(policy) for idx, policy in enumerate(all_policies)}
 
     def select_policy(agent_id):
         if agent_id.startswith('ppo'):
             return 'ppo'
-        if agent_id.startswith('bc'):
-            return 'bc'
+        if agent_id.startswith('maddpg'):
+            return "maddpg"
+
     multi_agent_config['policy_mapping_fn'] = select_policy
-    # TODO? would we have maddpg? Or is it just DDPG? Or?
-    multi_agent_config['policies_to_train'] = 'ppo'
+    multi_agent_config['policies_to_train'] = 'maddpg'
 
     # TODO? what is outer_shape?
     if "outer_shape" not in environment_params:
@@ -604,59 +582,62 @@ def gen_trainer_from_params(params):
 
     if "mdp_params" in environment_params:
         environment_params["eval_mdp_params"] = environment_params["mdp_params"]
-    '''
-    So far:
-        - the multiagent config contains the policies
-        - the policies are either PPO or BC, depending on how we want to train it
-        - then everything is passed to a PPO trainer. Why?
-            - BC does not need any training, right? So why do we pass it as well? Is it just the training partner?
-    We can subsitute the PPOTrainer for the MADDPGTrainer, but what will that give?
-        - need to compare if they both take the same parameters
-        PPOTrainer = build_trainer(
-            name="PPO",
-            default_config=DEFAULT_CONFIG,
-            default_policy=PPOTFPolicy,
-            get_policy_class=get_policy_class,
-            make_policy_optimizer=choose_policy_optimizer,
-            --- validate_config=validate_config, -----------------------> diff
-            after_optimizer_step=update_kl,
-            after_train_result=warn_about_bad_reward_scales)
-        
-        MADDPGTrainer = GenericOffPolicyTrainer.with_updates(
-            name="MADDPG",
-            default_config=DEFAULT_CONFIG,
-            --- default_policy=MADDPGTFPolicy, -----------------------> maybe we can change this policy to PPO?
-            get_policy_class=None,
-            --- before_init=None, -----------------------> diff
-            --- before_train_step=set_global_timestep,-----------------------> diff
-            make_policy_optimizer=make_optimizer,
-            after_train_result=add_trainer_metrics,
-            --- collect_metrics_fn=collect_metrics, -----------------------> diff
-            --- before_evaluate_fn=None) -----------------------> diff
-        
-    TODO?:
-        How do they know what parameters to put in the PPOTrainer class? There is no env or config when you go to it
-        
-        I understand that for PPO they implemented their own version and they get it through "custom_model" in "gen_policy"
-        However, how do they do it through BC? I don't see any new model, I only see them importing a policy model from RLLib. They do 
-        use some kind of model when they train the agent in "train_bc_model" which comes from "build_bc_model" which calls "_build_model"
-        which in turn creates a Keras Model
-    TODO! Make this into a MADDPG
-    '''
-    trainer = PPOTrainer(env="overcooked_multi_agent", config={
-        "multiagent": multi_agent_config,  # TODO? It is this place where they use their own implementation of the model
-        "callbacks" : TrainingCallbacks,
-        "custom_eval_function" : get_rllib_eval_function(evaluation_params, environment_params['eval_mdp_params'], environment_params['env_params'],
-                                        environment_params["outer_shape"], 'ppo', 'ppo' if self_play else 'bc',
-                                        verbose=params['verbose']),
-        "env_config" : environment_params,
-        "eager" : False,
-        **training_params
+
+    trainer = MADDPGTrainer(env="overcooked_multi_agent", config={
+        # === Log ===
+        "log_level": "ERROR",
+
+        # === Environment ===
+        "env_config": environment_params,
+        "num_envs_per_worker": 4,
+        "horizon": 25,
+
+        # === Policy Config ===
+        # --- Model ---
+        "good_policy": "maddpg",
+        "adv_policy": "maddpg",
+        "actor_hiddens": [64, 64],
+        "actor_hidden_activation": "relu",
+        "critic_hiddens": [64, 64],
+        "critic_hidden_activation": "relu",
+        "n_step": 1,
+        "gamma": 0.95,
+
+        # --- Exploration ---
+        "tau": 0.01,
+
+        # --- Replay buffer ---
+        "buffer_size": 1000000,
+
+        # --- Optimization ---
+        "actor_lr": 1e-2,
+        "critic_lr": 1e-2,
+        "learning_starts": 1024 * 25,
+        "sample_batch_size": 25,
+        "train_batch_size": 1024,
+
+        # --- Parallelism ---
+        "num_workers": 1,
+        "num_gpus": 0,
+        "num_gpus_per_worker": 0,
+
+        # === Multi-agent setting ===
+        "multiagent": {
+            "policies": policies,
+            "policy_mapping_fn": select_policy
+        },
+        #"callbacks": TrainingCallbacks,
+        "custom_eval_function": get_rllib_eval_function(evaluation_params, environment_params['eval_mdp_params'],
+                                                        environment_params['env_params'],
+                                                        environment_params["outer_shape"],
+                                                        'maddpg', 'maddpg',
+                                                        verbose=params['verbose']),
     }, logger_creator=custom_logger_creator)
     return trainer
 
 
 ### Serialization ###
+
 
 def save_trainer(trainer, params, path=None):
     """
@@ -677,6 +658,7 @@ def save_trainer(trainer, params, path=None):
         dill.dump(config, f)
     return save_path
 
+
 def load_trainer(save_path):
     """
     Returns a ray compatible trainer object that was previously saved at `save_path` by a call to `save_trainer`
@@ -687,39 +669,42 @@ def load_trainer(save_path):
     with open(config_path, "rb") as f:
         # We use dill (instead of pickle) here because we must deserialize functions
         config = dill.load(f)
-    
+
     # Override this param to lower overhead in trainer creation
     config['training_params']['num_workers'] = 0
 
     # Get un-trained trainer object with proper config
-    trainer = gen_trainer_from_params(config)
+    trainer = gen_maddpg_trainer_from_params(config)
 
     # Load weights into dummy object
     trainer.restore(save_path)
     return trainer
 
-def get_agent_from_trainer(trainer, policy_id="ppo", agent_index=0):
+
+def get_agent_from_trainer(trainer, policy_id="maddpg", agent_index=0):
     policy = trainer.get_policy(policy_id)
     dummy_env = trainer.env_creator(trainer.config['env_config'])
     featurize_fn = dummy_env.featurize_fn_map[policy_id]
     agent = RlLibAgent(policy, agent_index, featurize_fn=featurize_fn)
     return agent
 
-def get_agent_pair_from_trainer(trainer, policy_id_0='ppo', policy_id_1='ppo'):
+
+def get_agent_pair_from_trainer(trainer, policy_id_0='maddpg', policy_id_1='maddpg'):
     agent0 = get_agent_from_trainer(trainer, policy_id=policy_id_0)
     agent1 = get_agent_from_trainer(trainer, policy_id=policy_id_1)
     return AgentPair(agent0, agent1)
 
 
-def load_agent_pair(save_path, policy_id_0='ppo', policy_id_1='ppo'):
+def load_agent_pair(save_path, policy_id_0='maddpg', policy_id_1='maddpg'):
     """
-    Returns an Overcooked AgentPair object that has as player 0 and player 1 policies with 
+    Returns an Overcooked AgentPair object that has as player 0 and player 1 policies with
     ID policy_id_0 and policy_id_1, respectively
     """
     trainer = load_trainer(save_path)
     return get_agent_pair_from_trainer(trainer, policy_id_0, policy_id_1)
 
-def load_agent(save_path, policy_id='ppo', agent_index=0):
+
+def load_agent(save_path, policy_id='maddpg', agent_index=0):
     """
     Returns an RllibAgent (compatible with the Overcooked Agent API) from the `save_path` to a previously
     serialized trainer object created with `save_trainer`

@@ -6,8 +6,8 @@ from human_aware_rl.static import PPO_EXPECTED_DATA_PATH
 from human_aware_rl.data_dir import DATA_DIR
 from human_aware_rl.rllib.rllib import load_agent, load_agent_pair
 from human_aware_rl.imitation.behavior_cloning_tf2 import train_bc_model, get_bc_params
-from overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
-from overcooked_ai_py.agents.benchmarking import AgentEvaluator
+from overcooked_ai.src.overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld
+from overcooked_ai.src.overcooked_ai_py.agents.benchmarking import AgentEvaluator
 import tensorflow as tf
 import numpy as np
 

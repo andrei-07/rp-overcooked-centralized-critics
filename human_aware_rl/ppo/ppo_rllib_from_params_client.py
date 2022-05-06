@@ -1,6 +1,6 @@
 # All imports except rllib
 import argparse, os, sys, logging
-from overcooked_ai_py.agents.benchmarking import AgentEvaluator
+from overcooked_ai.src.overcooked_ai_py.agents.benchmarking import AgentEvaluator
 import numpy as np
 
 # environment variable that tells us whether this code is running on the server or not
