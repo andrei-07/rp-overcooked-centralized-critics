@@ -67,7 +67,7 @@ def my_config():
 
     # Base model params
     NUM_HIDDEN_LAYERS = 3
-    SIZE_HIDDEN_LAYERS = 64
+    SIZE_HIDDEN_LAYERS = 32
     NUM_FILTERS = 25
     NUM_CONV_LAYERS = 3
 
@@ -78,7 +78,7 @@ def my_config():
     D2RL = False
     ### Training Params ###
 
-    num_workers = 30 if not LOCAL_TESTING else 2
+    num_workers = 2 if not LOCAL_TESTING else 2
 
     # list of all random seeds to use for experiments, used to reproduce results
     seeds = [0]
@@ -104,10 +104,10 @@ def my_config():
     shared_policy = True
 
     # Number of training iterations to run
-    num_training_iters = 420 if not LOCAL_TESTING else 2
+    num_training_iters = 420 if not LOCAL_TESTING else 4
 
     # Stepsize of SGD.
-    lr = 5e-5
+    lr = 1e-3
 
     # Learning rate schedule.
     lr_schedule = None
@@ -126,7 +126,7 @@ def my_config():
     vf_share_layers = True
 
     # How much the loss of the value network is weighted in overall loss
-    vf_loss_coeff = 1e-4
+    vf_loss_coeff = 0.5
 
     # Entropy bonus coefficient, will anneal linearly from _start to _end over _horizon steps
     entropy_coeff_start = 0.2
@@ -215,7 +215,7 @@ def my_config():
     reward_shaping_factor = 1.0
 
     # Linearly anneal the reward shaping factor such that it reaches zero after this number of timesteps
-    reward_shaping_horizon = float('inf')
+    reward_shaping_horizon = 2.5e6
 
     # bc_factor represents that ppo agent gets paired with a bc agent for any episode
     # schedule for bc_factor is represented by a list of points (t_i, v_i) where v_i represents the 
@@ -366,7 +366,8 @@ def main(params):
         # Do the thing
         result = run(params)
         results.append(result)
-
+    for res in results:
+        print(res['custom_metrics'])
     # Return value gets sent to our slack observer for notification
     average_sparse_reward = np.mean([res['custom_metrics']['sparse_reward_mean'] for res in results])
     average_episode_reward = np.mean([res['episode_reward_mean'] for res in results])

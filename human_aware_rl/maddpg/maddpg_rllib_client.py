@@ -92,7 +92,7 @@ def my_config():
 
     # How many environment timesteps will be simulated (across all environments)
     # for one set of gradient updates. Is divided equally across environments
-    train_batch_size = 12000 if not LOCAL_TESTING else 800
+    train_batch_size = 12000 if not LOCAL_TESTING else 800 #-> 4k + 5k iter
 
     # size of minibatches we divide up each batch into before
     # performing gradient steps
@@ -105,10 +105,10 @@ def my_config():
     shared_policy = True
 
     # Number of training iterations to run
-    num_training_iters = 420 if not LOCAL_TESTING else 2
+    num_training_iters = 200000 if not LOCAL_TESTING else 4
 
     # Stepsize of SGD.
-    lr = 5e-5
+    lr = 1e-3
 
     # Learning rate schedule.
     lr_schedule = None
@@ -206,7 +206,7 @@ def my_config():
     reward_shaping_factor = 1.0
 
     # Linearly anneal the reward shaping factor such that it reaches zero after this number of timesteps
-    reward_shaping_horizon = float('inf')
+    reward_shaping_horizon = 2.5e6
 
     # TODO! Custom model -> should not be the case for us
     # To be passed into rl-lib model/custom_options config
@@ -361,8 +361,9 @@ def main(params):
         # Do the thing
         result = run(params)
         results.append(result)
-
+    for res in results:
+        print(res['custom_metrics'])
     # Return value gets sent to our slack observer for notification
-    # average_sparse_reward = np.mean([res['custom_metrics']['sparse_reward_mean'] for res in results])
-    # average_episode_reward = np.mean([res['episode_reward_mean'] for res in results])
-    # return {"average_sparse_reward": average_sparse_reward, "average_total_reward": average_episode_reward}
+    average_sparse_reward = np.mean([res['custom_metrics']['sparse_reward_mean'] for res in results])
+    average_episode_reward = np.mean([res['episode_reward_mean'] for res in results])
+    return {"average_sparse_reward": average_sparse_reward, "average_total_reward": average_episode_reward}

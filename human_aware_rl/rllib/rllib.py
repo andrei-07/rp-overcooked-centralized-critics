@@ -10,7 +10,6 @@ from ray.tune.result import DEFAULT_RESULTS_DIR
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.agents.callbacks import DefaultCallbacks
 from ray.rllib.agents.ppo.ppo import PPOTrainer
-from ray.rllib.contrib.maddpg.maddpg import MADDPGTrainer
 from ray.rllib.models import ModelCatalog
 from human_aware_rl.rllib.utils import softmax, get_base_ae, get_required_arguments, iterable_equal
 from datetime import datetime
@@ -371,11 +370,10 @@ class TrainingCallbacks(DefaultCallbacks):
         shaped_reward (int) - total reward shaping reward the agent earned this episode
         """
         # Get rllib.OvercookedMultiAgentEnv refernce from rllib wraper
+        print('on_episode_end')
         env = base_env.get_unwrapped()[0]
         # Both agents share the same info so it doesn't matter whose we use, just use 0th agent's
         info_dict = episode.last_info_for(env.curr_agents[0])
-        print(episode)
-        print(info_dict)
         ep_info = info_dict["episode"]
         game_stats = ep_info["ep_game_stats"]
 
@@ -463,6 +461,7 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
         # Log any metrics we care about for rllib tensorboard visualization
         metrics = {}
         metrics['average_sparse_reward'] = np.mean(results['ep_returns'])
+        print('here3', np.mean(results['ep_returns']))
         return metrics
 
     return _evaluate
