@@ -10,6 +10,7 @@ from ray.tune.result import DEFAULT_RESULTS_DIR
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.agents.callbacks import DefaultCallbacks
 from ray.rllib.agents.ppo.ppo import PPOTrainer
+from ray.rllib.contrib.maddpg.maddpg import MADDPGTrainer
 from ray.rllib.models import ModelCatalog
 from human_aware_rl.rllib.utils import softmax, get_base_ae, get_required_arguments, iterable_equal
 from datetime import datetime
@@ -79,7 +80,7 @@ class RlLibAgent(Agent):
 
         # Use Rllib.Policy class to compute action argmax and action probabilities
         [action_idx], rnn_state, info = self.policy.compute_actions(np.array([my_obs]), self.rnn_state)
-        agent_action =  Action.INDEX_TO_ACTION[action_idx]
+        agent_action = Action.INDEX_TO_ACTION[np.argmax(action_idx) if isinstance(action_idx, np.ndarray) else action_idx]
         
         # Softmax in numpy to convert logits to normalized probabilities
         logits = info['action_dist_inputs']
@@ -97,7 +98,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
     """
 
     # List of all agent types currently supported
-    supported_agents = ['ppo', 'bc']
+    supported_agents = ['maddpg', 'ppo', 'bc']
 
     # TODO? What is a schedule and why do we need it?
     # Default bc_schedule, includes no bc agent at any time
@@ -134,6 +135,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
             with linear interpolation in between the t_i
         use_phi (bool): Whether to use 'shaped_r_by_agent' or 'phi_s_prime' - 'phi_s' to determine dense reward TODO? What is phi?
         """
+        self.train_maddpg = True
         if bc_schedule:
             self.bc_schedule = bc_schedule
         self._validate_schedule(self.bc_schedule)
@@ -141,6 +143,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         # since we are not passing featurize_fn in as an argument, we create it here and check its validity
         # TODO? What is this featurize again?
         self.featurize_fn_map = {
+            "maddpg": lambda state: self.base_env.featurize_state_mdp(state),
             "ppo": lambda state: self.base_env.lossless_state_encoding_mdp(state),
             "bc": lambda state: self.base_env.featurize_state_mdp(state)
         }
@@ -155,7 +158,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         self.reset()
 
     def _validate_featurize_fns(self, mapping):
-        assert 'ppo' in mapping, "At least one ppo agent must be specified"
+        # assert 'ppo' in mapping, "At least one ppo agent must be specified"
         for k, v in mapping.items():
             assert k in self.supported_agents, "Unsuported agent type in featurize mapping {0}".format(k)
             assert callable(v), "Featurize_fn values must be functions"
@@ -192,12 +195,14 @@ class OvercookedMultiAgent(MultiAgentEnv):
         low = np.ones(obs_shape) * -100
         self.bc_observation_space = gym.spaces.Box(np.float32(low), np.float32(high), dtype=np.float32)
 
+    # !TODO! change if new agent added
     def _get_featurize_fn(self, agent_id):
         if agent_id.startswith('ppo'):
             return lambda state: self.base_env.lossless_state_encoding_mdp(state)
         if agent_id.startswith('bc'):
             return lambda state: self.base_env.featurize_state_mdp(state)
-        raise ValueError("Unsupported agent type {0}".format(agent_id))
+        return lambda state: self.base_env.featurize_state_mdp(state)
+        #raise ValueError("Unsupported agent type {0}".format(agent_id))
 
     def _get_obs(self, state):
         ob_p0 = self._get_featurize_fn(self.curr_agents[0])(state)[0]
@@ -205,6 +210,8 @@ class OvercookedMultiAgent(MultiAgentEnv):
         return ob_p0.astype(np.float32), ob_p1.astype(np.float32)
 
     def _populate_agents(self):
+        if self.train_maddpg:
+            return ['maddpg', 'maddpg']
         # Always include at least one ppo agent (i.e. bc_sp not supported for simplicity)
         agents = ['ppo']
 
@@ -240,7 +247,8 @@ class OvercookedMultiAgent(MultiAgentEnv):
         returns:
             observation: formatted to be standard input for self.agent_idx's policy
         """
-        action = [action_dict[self.curr_agents[0]], action_dict[self.curr_agents[1]]]
+        act = [action_dict[self.curr_agents[0]], action_dict[self.curr_agents[1]]]
+        action = [np.argmax(act[0]), np.argmax(act[1])] if self.train_maddpg else act
         assert all(self.action_space.contains(a) for a in action), "%r (%s) invalid"%(action, type(action))
         joint_action = [Action.INDEX_TO_ACTION[a] for a in action]
         # take a step in the current base environment
@@ -461,7 +469,7 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
         # Log any metrics we care about for rllib tensorboard visualization
         metrics = {}
         metrics['average_sparse_reward'] = np.mean(results['ep_returns'])
-        print('here3', np.mean(results['ep_returns']))
+
         return metrics
 
     return _evaluate
@@ -484,8 +492,8 @@ def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_polic
     evaluator = get_base_ae(mdp_params, {"horizon" : eval_params['ep_length'], "num_mdp":1}, outer_shape)
 
     # Override pre-processing functions with defaults if necessary
-    agent_0_featurize_fn = agent_0_featurize_fn if agent_0_featurize_fn else evaluator.env.lossless_state_encoding_mdp
-    agent_1_featurize_fn = agent_1_featurize_fn if agent_1_featurize_fn else evaluator.env.lossless_state_encoding_mdp
+    agent_0_featurize_fn = agent_0_featurize_fn if agent_0_featurize_fn else evaluator.env.featurize_state_mdp
+    agent_1_featurize_fn = agent_1_featurize_fn if agent_1_featurize_fn else evaluator.env.featurize_state_mdp
 
     # Wrap rllib policies in overcooked agents to be compatible with Evaluator code
     agent0 = RlLibAgent(agent_0_policy, agent_index=0, featurize_fn=agent_0_featurize_fn)
@@ -654,6 +662,138 @@ def gen_trainer_from_params(params):
     }, logger_creator=custom_logger_creator)
     return trainer
 
+def gen_maddpg_trainer_from_params(params):
+    # All ray environment set-up
+    if not ray.is_initialized():
+        init_params = {
+            "ignore_reinit_error": True,
+            "include_webui": False,
+            "temp_dir": params['ray_params']['temp_dir'],
+            "log_to_driver": params['verbose'],
+            "logging_level": logging.INFO if params['verbose'] else logging.CRITICAL
+        }
+        ray.init(**init_params)
+    register_env("overcooked_multi_agent", params['ray_params']['env_creator'])
+
+    # Parse params TODO! Look at these in more detail
+    model_params = params['model_params']
+    training_params = params['training_params']
+    environment_params = params['environment_params']
+    evaluation_params = params['evaluation_params']
+    multi_agent_params = params['environment_params']['multi_agent_params']
+
+    env = OvercookedMultiAgent.from_config(environment_params)
+
+    # Returns a properly formatted policy tuple to be passed into ppotrainer config
+    def gen_policy(policy_type="maddpg", i=0):
+        # supported policy types thus far
+        assert policy_type in ["maddpg"]
+        if policy_type == "maddpg":
+            maddpg_config = {
+                "agent_id": i,
+                "use_local_critic": True
+            }
+            # TODO?? do we need a different observation space? If so, how do we determine it?
+            return (None, env.bc_observation_space, env.action_space, maddpg_config)
+
+    # Rllib compatible way of setting the directory we store agent checkpoints in
+    logdir_prefix = "{0}_{1}_{2}".format(params["experiment_name"], params['training_params']['seed'], timestr)
+
+    def custom_logger_creator(config):
+        """Creates a Unified logger that stores results in <params['results_dir']>/<params["experiment_name"]>_<seed>_<timestamp>
+        """
+        results_dir = params['results_dir']
+        if not os.path.exists(results_dir):
+            try:
+                os.makedirs(results_dir)
+            except Exception as e:
+                print(
+                    "error creating custom logging dir. Falling back to default logdir {}".format(DEFAULT_RESULTS_DIR))
+                results_dir = DEFAULT_RESULTS_DIR
+        logdir = tempfile.mkdtemp(
+            prefix=logdir_prefix, dir=results_dir)
+        logger = UnifiedLogger(config, logdir, loggers=None)
+        return logger
+
+    # Create rllib compatible multi-agent config based on params
+    multi_agent_config = {}
+    all_policies = ['maddpg']
+
+    # TODO??! Since I changed the thing above to not take PPO anymore -> should I update this to take PPO?
+
+    multi_agent_config['policies'] = {policy: gen_policy(policy) for idx, policy in enumerate(all_policies)}
+    policies = {policy: gen_policy(policy) for idx, policy in enumerate(all_policies)}
+
+    def select_policy(agent_id):
+        if agent_id.startswith('ppo'):
+            return 'ppo'
+        if agent_id.startswith('maddpg'):
+            return "maddpg"
+
+    multi_agent_config['policy_mapping_fn'] = select_policy
+    multi_agent_config['policies_to_train'] = 'maddpg'
+
+    # TODO? what is outer_shape?
+    if "outer_shape" not in environment_params:
+        environment_params["outer_shape"] = None
+
+    if "mdp_params" in environment_params:
+        environment_params["eval_mdp_params"] = environment_params["mdp_params"]
+
+    trainer = MADDPGTrainer(env="overcooked_multi_agent", config={
+        "callbacks": TrainingCallbacks,
+        "custom_eval_function": get_rllib_eval_function(evaluation_params, environment_params['eval_mdp_params'],
+                                                        environment_params['env_params'],
+                                                        environment_params["outer_shape"],
+                                                        'maddpg', 'maddpg',
+                                                        verbose=params['verbose']),
+        "evaluation_interval": training_params['evaluation_interval'],
+        "eager": False,
+        # === Log ===
+        "log_level": "ERROR",
+
+        # === Environment ===
+        "env_config": environment_params,
+        "num_envs_per_worker": 1,
+        "horizon": 400,
+
+        # === Policy Config ===
+        # --- Model ---
+        "good_policy": "maddpg",
+        "adv_policy": "maddpg",
+        "actor_hiddens": [64, 64] * 2,
+        "actor_hidden_activation": "relu",
+        "critic_hiddens": [64, 64] * 2,
+        "critic_hidden_activation": "relu",
+        "n_step": 1,
+        "gamma": 0.95, # 0.95, 0.95
+
+        # --- Exploration ---
+        "tau": 0.01,
+
+        # --- Replay buffer ---
+        "buffer_size": 1000000,
+
+        # --- Optimization ---
+        "actor_lr": 1e-3, # 1e-2, 1e-2
+        "critic_lr": 1e-3, # 1e-2, 1e-2
+        "learning_starts": 1024, # 1024 * 100, # 1024 * 25, 1024 * 25
+        #"sample_batch_size": 300, # 100, 25
+        "train_batch_size": 4000, # 12k, 4k
+
+        # --- Parallelism ---
+        "num_workers": 1, # 10 10
+        "num_gpus": 0,
+        "num_gpus_per_worker": 0,
+
+        # === Multi-agent setting ===
+        "multiagent": {
+            "policies": policies,
+            "policy_mapping_fn": select_policy,
+            "replay_mode": "lockstep"
+        },
+    }, logger_creator=custom_logger_creator)
+    return trainer
 
 ### Serialization ###
 

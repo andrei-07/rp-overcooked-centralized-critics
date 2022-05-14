@@ -32,7 +32,7 @@ import ray
 from ray.tune.result import DEFAULT_RESULTS_DIR
 from ray.tune.registry import register_env
 from human_aware_rl.ppo.ppo_rllib import RllibPPOModel, RllibLSTMPPOModel
-from human_aware_rl.rllib.rllib_maddpg import OvercookedMultiAgent, save_trainer, gen_maddpg_trainer_from_params
+from human_aware_rl.rllib.rllib import OvercookedMultiAgent, save_trainer, gen_maddpg_trainer_from_params
 from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy, BC_SAVE_DIR
 
 
@@ -52,7 +52,7 @@ from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy,
 # Dummy wrapper to pass rllib type checks
 def _env_creator(env_config):
     # Re-import required here to work with serialization
-    from human_aware_rl.rllib.rllib_maddpg import OvercookedMultiAgent
+    from human_aware_rl.rllib.rllib import OvercookedMultiAgent
     return OvercookedMultiAgent.from_config(env_config)
 
 
