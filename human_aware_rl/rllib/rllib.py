@@ -135,7 +135,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
             with linear interpolation in between the t_i
         use_phi (bool): Whether to use 'shaped_r_by_agent' or 'phi_s_prime' - 'phi_s' to determine dense reward TODO? What is phi?
         """
-        self.train_maddpg = True
+        self.train_maddpg = False
         if bc_schedule:
             self.bc_schedule = bc_schedule
         self._validate_schedule(self.bc_schedule)
@@ -423,7 +423,7 @@ class TrainingCallbacks(DefaultCallbacks):
         pass
 
 # TODO?! Evaluation function basically compute how well the policy performed?
-def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shape, agent_0_policy_str='ppo', agent_1_policy_str='ppo', verbose=False):
+def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shape, agent_0_policy_str='ppo', agent_1_policy_str='ppo', verbose=False, train_maddpg=False):
     """
     Used to "curry" rllib evaluation function by wrapping additional parameters needed in a local scope, and returning a
     function with rllib custom_evaluation_function compatible signature
@@ -464,7 +464,7 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
 
         # Compute the evauation rollout. Note this doesn't use the rllib passed in evaluation_workers, so this 
         # computation all happens on the CPU. Could change this if evaluation becomes a bottleneck
-        results = evaluate(eval_params, eval_mdp_params, outer_shape, agent_0_policy, agent_1_policy, agent_0_feat_fn, agent_1_feat_fn, verbose=verbose)
+        results = evaluate(eval_params, eval_mdp_params, outer_shape, agent_0_policy, agent_1_policy, agent_0_feat_fn, agent_1_feat_fn, verbose=verbose, train_maddpg=train_maddpg)
 
         # Log any metrics we care about for rllib tensorboard visualization
         metrics = {}
@@ -475,7 +475,7 @@ def get_rllib_eval_function(eval_params, eval_mdp_params, env_params, outer_shap
     return _evaluate
 
 
-def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_policy, agent_0_featurize_fn=None, agent_1_featurize_fn=None, verbose=False):
+def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_policy, agent_0_featurize_fn=None, agent_1_featurize_fn=None, verbose=False, train_maddpg=False):
     """
     Used to visualize rollouts of trained policies
 
@@ -492,8 +492,8 @@ def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_polic
     evaluator = get_base_ae(mdp_params, {"horizon" : eval_params['ep_length'], "num_mdp":1}, outer_shape)
 
     # Override pre-processing functions with defaults if necessary
-    agent_0_featurize_fn = agent_0_featurize_fn if agent_0_featurize_fn else evaluator.env.featurize_state_mdp
-    agent_1_featurize_fn = agent_1_featurize_fn if agent_1_featurize_fn else evaluator.env.featurize_state_mdp
+    agent_0_featurize_fn = agent_0_featurize_fn if agent_0_featurize_fn else evaluator.env.featurize_state_mdp if train_maddpg else evaluator.env.lossless_state_encoding_mdp
+    agent_1_featurize_fn = agent_1_featurize_fn if agent_1_featurize_fn else evaluator.env.featurize_state_mdp if train_maddpg else evaluator.env.lossless_state_encoding_mdp
 
     # Wrap rllib policies in overcooked agents to be compatible with Evaluator code
     agent0 = RlLibAgent(agent_0_policy, agent_index=0, featurize_fn=agent_0_featurize_fn)
@@ -655,7 +655,7 @@ def gen_trainer_from_params(params):
         "callbacks" : TrainingCallbacks,
         "custom_eval_function" : get_rllib_eval_function(evaluation_params, environment_params['eval_mdp_params'], environment_params['env_params'],
                                         environment_params["outer_shape"], 'ppo', 'ppo' if self_play else 'bc',
-                                        verbose=params['verbose']),
+                                        verbose=params['verbose'], train_maddpg=False),
         "env_config" : environment_params,
         "eager" : False,
         **training_params
@@ -746,7 +746,7 @@ def gen_maddpg_trainer_from_params(params):
                                                         environment_params['env_params'],
                                                         environment_params["outer_shape"],
                                                         'maddpg', 'maddpg',
-                                                        verbose=params['verbose']),
+                                                        verbose=params['verbose'], train_maddpg=True),
         "evaluation_interval": training_params['evaluation_interval'],
         "eager": False,
         # === Log ===
@@ -777,9 +777,9 @@ def gen_maddpg_trainer_from_params(params):
         # --- Optimization ---
         "actor_lr": 1e-3, # 1e-2, 1e-2
         "critic_lr": 1e-3, # 1e-2, 1e-2
-        "learning_starts": 1024, # 1024 * 100, # 1024 * 25, 1024 * 25
-        #"sample_batch_size": 300, # 100, 25
-        "train_batch_size": 4000, # 12k, 4k
+        "learning_starts": 12000 * 4000, # 1024 * 100, # 1024 * 25, 1024 * 25
+        "sample_batch_size": 4000, # 100, 25
+        "train_batch_size": 12000, # 12k, 4k
 
         # --- Parallelism ---
         "num_workers": 1, # 10 10

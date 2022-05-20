@@ -61,7 +61,7 @@ def my_config():
     ### Model params ###
 
     # Whether dense reward should come from potential function or not
-    use_phi = True
+    use_phi = False
 
     # whether to use recurrence in ppo model
     use_lstm = False
@@ -94,6 +94,8 @@ def my_config():
     # for one set of gradient updates. Is divided equally across environments
     train_batch_size = 12000 if not LOCAL_TESTING else 800 #-> 4k + 5k iter
 
+    sample_batch_size = 2000
+
     # size of minibatches we divide up each batch into before
     # performing gradient steps
     sgd_minibatch_size = 2000 if not LOCAL_TESTING else 800
@@ -105,7 +107,7 @@ def my_config():
     shared_policy = True
 
     # Number of training iterations to run
-    num_training_iters = 200000 if not LOCAL_TESTING else 4
+    num_training_iters = 600 if not LOCAL_TESTING else 4
 
     # Stepsize of SGD.
     lr = 1e-3
@@ -179,12 +181,14 @@ def my_config():
 
     # Name of directory to store training results in (stored in ~/ray_results/<experiment_name>)
 
-    params_str = str(use_phi) + "_nw=%d_vf=%f_es=%f_en=%f_kl=%f" % (
-        num_workers,
-        vf_loss_coeff,
-        entropy_coeff_start,
-        entropy_coeff_end,
-        kl_coeff
+    reward_shaping_horizon = float('inf')
+
+    params_str = str(use_phi) + "_tbs=%d_sbs=%d_iter=%d_rsh=%f_lr=%f" % (
+        train_batch_size,
+        sample_batch_size,
+        num_training_iters,
+        reward_shaping_horizon,
+        lr
     )
 
     experiment_name = "{0}_{1}_{2}".format("MADDPG", layout_name, params_str)
@@ -206,7 +210,7 @@ def my_config():
     reward_shaping_factor = 1.0
 
     # Linearly anneal the reward shaping factor such that it reaches zero after this number of timesteps
-    reward_shaping_horizon = 2.5e6
+
 
     # TODO! Custom model -> should not be the case for us
     # To be passed into rl-lib model/custom_options config
@@ -223,24 +227,16 @@ def my_config():
     # TODO! What training params to we need to MADDPG?
     # to be passed into the rllib.PPOTrainer class
     training_params = {
-        "num_workers": num_workers,
-        "train_batch_size": train_batch_size,
-        "sgd_minibatch_size": sgd_minibatch_size,
-        "rollout_fragment_length": rollout_fragment_length,
-        "num_sgd_iter": num_sgd_iter,
-        "lr": lr,
-        "lr_schedule": lr_schedule,
-        "grad_clip": grad_clip,
-        "gamma": gamma,
-        "lambda": lmbda,
-        "vf_share_layers": vf_share_layers,
-        "vf_loss_coeff": vf_loss_coeff,
-        "kl_coeff": kl_coeff,
-        "clip_param": clip_param,
-        "num_gpus": num_gpus,
+        "num_workers": 1,
+        "train_batch_size": 12000,
+        "sample_batch_size": 4000,
+        "learning_starts": 12000 * 4000,
+        #"num_sgd_iter": num_sgd_iter,
+        "actor_lr": lr,
+        "critic_lr": lr,
+
         "seed": seed,
         "evaluation_interval": evaluation_interval,
-        "entropy_coeff_schedule": [(0, entropy_coeff_start), (entropy_coeff_horizon, entropy_coeff_end)],
         "eager": eager,
         "log_level": "WARN" if verbose else "ERROR"
     }

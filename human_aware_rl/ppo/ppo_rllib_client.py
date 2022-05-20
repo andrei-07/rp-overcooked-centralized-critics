@@ -5,7 +5,7 @@ import numpy as np
 
 # environment variable that tells us whether this code is running on the server or not
 LOCAL_TESTING = os.getenv('RUN_ENV', 'production') == 'local'
-
+print('Local_testing', LOCAL_TESTING)
 # Sacred setup (must be before rllib imports)
 from sacred import Experiment
 ex = Experiment("PPO RLLib")
@@ -60,14 +60,14 @@ def my_config():
     ### Model params ###
 
     # Whether dense reward should come from potential function or not
-    use_phi = True
+    use_phi = False
 
     # whether to use recurrence in ppo model
     use_lstm = False
 
     # Base model params
     NUM_HIDDEN_LAYERS = 3
-    SIZE_HIDDEN_LAYERS = 32
+    SIZE_HIDDEN_LAYERS = 64
     NUM_FILTERS = 25
     NUM_CONV_LAYERS = 3
 
@@ -78,7 +78,7 @@ def my_config():
     D2RL = False
     ### Training Params ###
 
-    num_workers = 2 if not LOCAL_TESTING else 2
+    num_workers = 4 if not LOCAL_TESTING else 2
 
     # list of all random seeds to use for experiments, used to reproduce results
     seeds = [0]
@@ -104,16 +104,16 @@ def my_config():
     shared_policy = True
 
     # Number of training iterations to run
-    num_training_iters = 420 if not LOCAL_TESTING else 4
+    num_training_iters = 500 if not LOCAL_TESTING else 4
 
     # Stepsize of SGD.
-    lr = 1e-3
+    lr = 0.001
 
     # Learning rate schedule.
     lr_schedule = None
 
     # If specified, clip the global norm of gradients by this amount
-    grad_clip = 0.1
+    grad_clip = 0.05
 
     # Discount factor
     gamma = 0.99
@@ -215,7 +215,7 @@ def my_config():
     reward_shaping_factor = 1.0
 
     # Linearly anneal the reward shaping factor such that it reaches zero after this number of timesteps
-    reward_shaping_horizon = 2.5e6
+    reward_shaping_horizon = 4000000 # 2,500,000.0
 
     # bc_factor represents that ppo agent gets paired with a bc agent for any episode
     # schedule for bc_factor is represented by a list of points (t_i, v_i) where v_i represents the 
