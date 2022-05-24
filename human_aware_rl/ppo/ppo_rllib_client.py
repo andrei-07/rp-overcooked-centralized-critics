@@ -45,7 +45,7 @@ from human_aware_rl.imitation.behavior_cloning_tf2 import BehaviorCloningPolicy,
 #   In order to view the results of training, run the following #
 #   command                                                     #
 #                                                               #
-#   tensorboard --log-dir ~/ray_results/                        #
+#   tensorboard --logdir ~/ray_results/                        #
 #                                                               #
 #################################################################
 
@@ -69,7 +69,7 @@ def my_config():
     NUM_HIDDEN_LAYERS = 3
     SIZE_HIDDEN_LAYERS = 64
     NUM_FILTERS = 25
-    NUM_CONV_LAYERS = 3
+    NUM_CONV_LAYERS = 0
 
     # LSTM memory cell size (only used if use_lstm=True)
     CELL_SIZE = 256
@@ -78,7 +78,7 @@ def my_config():
     D2RL = False
     ### Training Params ###
 
-    num_workers = 4 if not LOCAL_TESTING else 2
+    num_workers = 2 if not LOCAL_TESTING else 2
 
     # list of all random seeds to use for experiments, used to reproduce results
     seeds = [0]
@@ -215,7 +215,7 @@ def my_config():
     reward_shaping_factor = 1.0
 
     # Linearly anneal the reward shaping factor such that it reaches zero after this number of timesteps
-    reward_shaping_horizon = 4000000 # 2,500,000.0
+    reward_shaping_horizon = float('inf')  # 4000000 # 2,500,000.0
 
     # bc_factor represents that ppo agent gets paired with a bc agent for any episode
     # schedule for bc_factor is represented by a list of points (t_i, v_i) where v_i represents the 

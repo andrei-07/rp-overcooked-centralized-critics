@@ -79,7 +79,7 @@ def my_config():
     D2RL = False
     ### Training Params ###
 
-    num_workers = 30 if not LOCAL_TESTING else 2
+    num_workers = 1 if not LOCAL_TESTING else 2
 
     # list of all random seeds to use for experiments, used to reproduce results
     seeds = [0]
@@ -92,59 +92,24 @@ def my_config():
 
     # How many environment timesteps will be simulated (across all environments)
     # for one set of gradient updates. Is divided equally across environments
-    train_batch_size = 12000 if not LOCAL_TESTING else 800 #-> 4k + 5k iter
+    train_batch_size = 20000 if not LOCAL_TESTING else 800 #-> 4k + 5k iter
 
-    sample_batch_size = 2000
-
-    # size of minibatches we divide up each batch into before
-    # performing gradient steps
-    sgd_minibatch_size = 2000 if not LOCAL_TESTING else 800
-
-    # Rollout length
-    rollout_fragment_length = 400
+    sample_batch_size = 2000 if not LOCAL_TESTING else 800
 
     # Whether all PPO agents should share the same policy network
     shared_policy = True
 
     # Number of training iterations to run
-    num_training_iters = 600 if not LOCAL_TESTING else 4
+    num_training_iters = 1200 if not LOCAL_TESTING else 4
 
     # Stepsize of SGD.
     lr = 1e-3
 
-    # Learning rate schedule.
-    lr_schedule = None
+    gamma = 0.95
 
-    # If specified, clip the global norm of gradients by this amount
-    grad_clip = 0.1
+    tau = 0.01
 
-    # Discount factor
-    gamma = 0.99
-
-    # Exponential decay factor for GAE (how much weight to put on monte carlo samples)
-    # Reference: https://arxiv.org/pdf/1506.02438.pdf
-    lmbda = 0.98
-
-    # Whether the value function shares layers with the policy model
-    vf_share_layers = True
-
-    # How much the loss of the value network is weighted in overall loss
-    vf_loss_coeff = 1e-4
-
-    # Entropy bonus coefficient, will anneal linearly from _start to _end over _horizon steps
-    entropy_coeff_start = 0.2
-    entropy_coeff_end = 0.1
-    entropy_coeff_horizon = 3e5
-
-    # Initial coefficient for KL divergence.
-    kl_coeff = 0.2
-
-    # PPO clipping factor
-    clip_param = 0.05
-
-    # Number of SGD iterations in each outer loop (i.e., number of epochs to
-    # execute per train batch).
-    num_sgd_iter = 8 if not LOCAL_TESTING else 1
+    buffer_size = 1000000
 
     # How many trainind iterations (calls to trainer.train()) to run before saving model checkpoint
     save_freq = 25
@@ -179,16 +144,22 @@ def my_config():
 
     # all_layout_names = '_'.join(layout_names)
 
-    # Name of directory to store training results in (stored in ~/ray_results/<experiment_name>)
-
+    # Linearly anneal the reward shaping factor such that it reaches zero after this number of timesteps
     reward_shaping_horizon = float('inf')
 
-    params_str = str(use_phi) + "_tbs=%d_sbs=%d_iter=%d_rsh=%f_lr=%f" % (
+    # Constant by which shaped rewards are multiplied by when calculating total reward
+    reward_shaping_factor = 1.0
+
+    # Name of directory to store training results in (stored in ~/ray_results/<experiment_name>)
+    params_str = str(use_phi) + "_tbs=%d_sbs=%d_iter=%d_rsh=%f_rsf=%f_lr=%f_gamma=%f_tau=%f" % (
         train_batch_size,
         sample_batch_size,
         num_training_iters,
         reward_shaping_horizon,
-        lr
+        reward_shaping_factor,
+        lr,
+        gamma,
+        tau
     )
 
     experiment_name = "{0}_{1}_{2}".format("MADDPG", layout_name, params_str)
@@ -206,11 +177,6 @@ def my_config():
     # Max episode length
     horizon = 400
 
-    # Constant by which shaped rewards are multiplied by when calculating total reward
-    reward_shaping_factor = 1.0
-
-    # Linearly anneal the reward shaping factor such that it reaches zero after this number of timesteps
-
 
     # TODO! Custom model -> should not be the case for us
     # To be passed into rl-lib model/custom_options config
@@ -227,13 +193,34 @@ def my_config():
     # TODO! What training params to we need to MADDPG?
     # to be passed into the rllib.PPOTrainer class
     training_params = {
-        "num_workers": 1,
-        "train_batch_size": 12000,
-        "sample_batch_size": 4000,
-        "learning_starts": 12000 * 4000,
-        #"num_sgd_iter": num_sgd_iter,
+        "num_workers": num_workers,
+        "num_gpus": 0,
+        "num_gpus_per_worker": 0,
+        "num_envs_per_worker": 1,
+
+        # === Policy Config ===
+        # --- Model ---
+        "good_policy": "maddpg",
+        "adv_policy": "maddpg",
+        "actor_hiddens": [64, 64, 64],
+        "actor_hidden_activation": "relu",
+        "critic_hiddens": [64, 64, 64],
+        "critic_hidden_activation": "relu",
+        "n_step": 1,
+        "gamma": gamma,
+
+        # --- Exploration ---
+        "tau": tau,
+
+        # --- Replay buffer ---
+        "buffer_size": 1000000,
+
+        # --- Optimization ---
         "actor_lr": lr,
         "critic_lr": lr,
+        "learning_starts": train_batch_size * sample_batch_size,
+        "sample_batch_size": sample_batch_size,
+        "train_batch_size": train_batch_size,
 
         "seed": seed,
         "evaluation_interval": evaluation_interval,

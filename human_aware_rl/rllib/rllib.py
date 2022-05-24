@@ -3,7 +3,6 @@ from overcooked_ai.src.overcooked_ai_py.mdp.overcooked_env import OvercookedEnv
 from overcooked_ai.src.overcooked_ai_py.mdp.overcooked_mdp import OvercookedGridworld, EVENT_TYPES
 from overcooked_ai.src.overcooked_ai_py.agents.benchmarking import AgentEvaluator
 from overcooked_ai.src.overcooked_ai_py.agents.agent import Agent, AgentPair
-
 from ray.tune.registry import register_env
 from ray.tune.logger import UnifiedLogger
 from ray.tune.result import DEFAULT_RESULTS_DIR
@@ -144,7 +143,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
         # TODO? What is this featurize again?
         self.featurize_fn_map = {
             "maddpg": lambda state: self.base_env.featurize_state_mdp(state),
-            "ppo": lambda state: self.base_env.lossless_state_encoding_mdp(state),
+            "ppo": lambda state: self.base_env.featurize_state_mdp(state),
             "bc": lambda state: self.base_env.featurize_state_mdp(state)
         }
         self._validate_featurize_fns(self.featurize_fn_map)
@@ -182,11 +181,11 @@ class OvercookedMultiAgent(MultiAgentEnv):
         dummy_state = self.base_env.mdp.get_standard_start_state()
 
         #ppo observation
-        featurize_fn_ppo = lambda state: self.base_env.lossless_state_encoding_mdp(state) # TODO? So we basically just encode the mdp states?
+        featurize_fn_ppo = lambda state: self.base_env.featurize_state_mdp(state) # TODO? So we basically just encode the mdp states?
         obs_shape = featurize_fn_ppo(dummy_state)[0].shape
-        high = np.ones(obs_shape) * float("inf")
-        low = np.ones(obs_shape) * 0
-        self.ppo_observation_space = gym.spaces.Box(np.float32(low), np.float32(high), dtype=np.float32) # TODO? Why a box? What is it? How does it work? TODO! It is basically the obs_dict but not3 a dict
+        high = np.ones(obs_shape) * 100
+        low = np.ones(obs_shape) * -100
+        self.ppo_observation_space = gym.spaces.Box(np.float32(low), np.float32(high), dtype=np.float32)
 
         # bc observation
         featurize_fn_bc = lambda state: self.base_env.featurize_state_mdp(state) # TODO? What is the difference when compared to the lossless_state_encoding_mdp version?
@@ -198,7 +197,7 @@ class OvercookedMultiAgent(MultiAgentEnv):
     # !TODO! change if new agent added
     def _get_featurize_fn(self, agent_id):
         if agent_id.startswith('ppo'):
-            return lambda state: self.base_env.lossless_state_encoding_mdp(state)
+            return lambda state: self.base_env.featurize_state_mdp(state)
         if agent_id.startswith('bc'):
             return lambda state: self.base_env.featurize_state_mdp(state)
         return lambda state: self.base_env.featurize_state_mdp(state)
@@ -492,8 +491,8 @@ def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_polic
     evaluator = get_base_ae(mdp_params, {"horizon" : eval_params['ep_length'], "num_mdp":1}, outer_shape)
 
     # Override pre-processing functions with defaults if necessary
-    agent_0_featurize_fn = agent_0_featurize_fn if agent_0_featurize_fn else evaluator.env.featurize_state_mdp if train_maddpg else evaluator.env.lossless_state_encoding_mdp
-    agent_1_featurize_fn = agent_1_featurize_fn if agent_1_featurize_fn else evaluator.env.featurize_state_mdp if train_maddpg else evaluator.env.lossless_state_encoding_mdp
+    agent_0_featurize_fn = agent_0_featurize_fn if agent_0_featurize_fn else evaluator.env.featurize_state_mdp if train_maddpg else evaluator.env.featurize_state_mdp
+    agent_1_featurize_fn = agent_1_featurize_fn if agent_1_featurize_fn else evaluator.env.featurize_state_mdp if train_maddpg else evaluator.env.featurize_state_mdp
 
     # Wrap rllib policies in overcooked agents to be compatible with Evaluator code
     agent0 = RlLibAgent(agent_0_policy, agent_index=0, featurize_fn=agent_0_featurize_fn)
@@ -747,44 +746,44 @@ def gen_maddpg_trainer_from_params(params):
                                                         environment_params["outer_shape"],
                                                         'maddpg', 'maddpg',
                                                         verbose=params['verbose'], train_maddpg=True),
-        "evaluation_interval": training_params['evaluation_interval'],
-        "eager": False,
+        #"evaluation_interval": training_params['evaluation_interval'],
+        #"eager": False,
         # === Log ===
-        "log_level": "ERROR",
+        #"log_level": "ERROR",
 
         # === Environment ===
         "env_config": environment_params,
-        "num_envs_per_worker": 1,
-        "horizon": 400,
-
-        # === Policy Config ===
-        # --- Model ---
-        "good_policy": "maddpg",
-        "adv_policy": "maddpg",
-        "actor_hiddens": [64, 64] * 2,
-        "actor_hidden_activation": "relu",
-        "critic_hiddens": [64, 64] * 2,
-        "critic_hidden_activation": "relu",
-        "n_step": 1,
-        "gamma": 0.95, # 0.95, 0.95
-
-        # --- Exploration ---
-        "tau": 0.01,
-
-        # --- Replay buffer ---
-        "buffer_size": 1000000,
-
-        # --- Optimization ---
-        "actor_lr": 1e-3, # 1e-2, 1e-2
-        "critic_lr": 1e-3, # 1e-2, 1e-2
-        "learning_starts": 12000 * 4000, # 1024 * 100, # 1024 * 25, 1024 * 25
-        "sample_batch_size": 4000, # 100, 25
-        "train_batch_size": 12000, # 12k, 4k
-
-        # --- Parallelism ---
-        "num_workers": 1, # 10 10
-        "num_gpus": 0,
-        "num_gpus_per_worker": 0,
+        # "num_envs_per_worker": 1,
+        # "horizon": 400,
+        #
+        # # === Policy Config ===
+        # # --- Model ---
+        # "good_policy": "maddpg",
+        # "adv_policy": "maddpg",
+        # "actor_hiddens": [64, 64, 64] ,
+        # "actor_hidden_activation": "relu",
+        # "critic_hiddens": [64, 64, 64] ,
+        # "critic_hidden_activation": "relu",
+        # "n_step": 1,
+        # "gamma": 0.9, # 0.95, 0.95
+        #
+        # # --- Exploration ---
+        # "tau": 0.3,
+        #
+        # # --- Replay buffer ---
+        # "buffer_size": 1000000,
+        #
+        # # --- Optimization ---
+        # "actor_lr": 1e-3, # 1e-2, 1e-2
+        # "critic_lr": 1e-3, # 1e-2, 1e-2
+        # "learning_starts": 12000 * 2000, # 1024 * 100, # 1024 * 25, 1024 * 25
+        # "sample_batch_size": 2000, # 100, 25
+        # "train_batch_size": 12000, # 12k, 4k
+        #
+        # # --- Parallelism ---
+        # "num_workers": 1, # 10 10
+        # "num_gpus": 0,
+        # "num_gpus_per_worker": 0,
 
         # === Multi-agent setting ===
         "multiagent": {
@@ -792,6 +791,7 @@ def gen_maddpg_trainer_from_params(params):
             "policy_mapping_fn": select_policy,
             "replay_mode": "lockstep"
         },
+        **training_params
     }, logger_creator=custom_logger_creator)
     return trainer
 
@@ -871,5 +871,3 @@ def load_agent(save_path, policy_id='ppo', agent_index=0):
     """
     trainer = load_trainer(save_path)
     return get_agent_from_trainer(trainer, policy_id=policy_id, agent_index=agent_index)
-
-
