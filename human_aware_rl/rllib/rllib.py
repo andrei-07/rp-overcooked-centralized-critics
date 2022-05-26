@@ -11,6 +11,10 @@ from ray.rllib.agents.callbacks import DefaultCallbacks
 from ray.rllib.agents.ppo.ppo import PPOTrainer
 from ray.rllib.contrib.maddpg.maddpg import MADDPGTrainer
 from ray.rllib.models import ModelCatalog
+from human_aware_rl.rllib.centralized_critic_model import (
+    CentralizedCriticModel,
+    CCTrainer
+)
 from human_aware_rl.rllib.utils import softmax, get_base_ae, get_required_arguments, iterable_equal
 from datetime import datetime
 import tempfile
@@ -519,21 +523,27 @@ def evaluate(eval_params, mdp_params, outer_shape, agent_0_policy, agent_1_polic
 
 
 def gen_trainer_from_params(params):
+    cc = params['cc']
+
     # All ray environment set-up
     if not ray.is_initialized():
         init_params = {
-            "ignore_reinit_error" : True,
-            "include_webui" : False,
-            "temp_dir" : params['ray_params']['temp_dir'],
-            "log_to_driver" : params['verbose'],
-            "logging_level" : logging.INFO if params['verbose'] else logging.CRITICAL
+            "ignore_reinit_error": True,
+            "include_webui": False,
+            "temp_dir": params['ray_params']['temp_dir'],
+            "log_to_driver": params['verbose'],
+            "logging_level": logging.INFO if params['verbose'] else logging.CRITICAL
         }
         ray.init(**init_params)
     register_env("overcooked_multi_agent", params['ray_params']['env_creator'])
-    # TODO? Do I also need to implement a custom model? Can I use the one they already have since it is with PPO? Where is this actually used
-    ModelCatalog.register_custom_model(params['ray_params']['custom_model_id'], params['ray_params']['custom_model_cls'])
 
-    # Parse params TODO! Look at these in more detail
+    if cc:
+        print("yes we have cc")
+        ModelCatalog.register_custom_model("cc_model", CentralizedCriticModel)
+    else:
+        ModelCatalog.register_custom_model(params['ray_params']['custom_model_id'],
+                                           params['ray_params']['custom_model_cls'])
+
     model_params = params['model_params']
     training_params = params['training_params']
     environment_params = params['environment_params']
@@ -543,7 +553,6 @@ def gen_trainer_from_params(params):
 
     env = OvercookedMultiAgent.from_config(environment_params)
 
-    # TODO! I can modify this to also accept ddpg. Question is, do we give it a DDPG and make the trainer MADDPG or we write MADDPG directly? If the former is possible, we can just change the type of trainer
     # Returns a properly formatted policy tuple to be passed into ppotrainer config
     def gen_policy(policy_type="ppo"):
         # supported policy types thus far
@@ -551,9 +560,12 @@ def gen_trainer_from_params(params):
 
         if policy_type == "ppo":
             config = {
+                "model": {
+                    "custom_model": "cc_model"
+                }
+            } if cc else { # use cc or non-cc model
                 "model" : {
                     "custom_options" : model_params,
-                    # TODO? Just to be clear: Here we specify that, as a model (neural net), we will use the predefined version. Could be helpfu
                     "custom_model" : "MyPPOModel"
                 }
             }
@@ -565,20 +577,22 @@ def gen_trainer_from_params(params):
 
     # Rllib compatible way of setting the directory we store agent checkpoints in
     logdir_prefix = "{0}_{1}_{2}".format(params["experiment_name"], params['training_params']['seed'], timestr)
+
     def custom_logger_creator(config):
-                """Creates a Unified logger that stores results in <params['results_dir']>/<params["experiment_name"]>_<seed>_<timestamp>
-                """
-                results_dir = params['results_dir']
-                if not os.path.exists(results_dir):
-                    try:
-                        os.makedirs(results_dir)
-                    except Exception as e:
-                        print("error creating custom logging dir. Falling back to default logdir {}".format(DEFAULT_RESULTS_DIR))
-                        results_dir = DEFAULT_RESULTS_DIR
-                logdir = tempfile.mkdtemp(
-                    prefix=logdir_prefix, dir=results_dir)
-                logger = UnifiedLogger(config, logdir, loggers=None)
-                return logger
+        """Creates a Unified logger that stores results in <params['results_dir']>/<params["experiment_name"]>_<seed>_<timestamp>
+        """
+        results_dir = params['results_dir']
+        if not os.path.exists(results_dir):
+            try:
+                os.makedirs(results_dir)
+            except Exception as e:
+                print(
+                    "error creating custom logging dir. Falling back to default logdir {}".format(DEFAULT_RESULTS_DIR))
+                results_dir = DEFAULT_RESULTS_DIR
+        logdir = tempfile.mkdtemp(
+            prefix=logdir_prefix, dir=results_dir)
+        logger = UnifiedLogger(config, logdir, loggers=None)
+        return logger
 
     # Create rllib compatible multi-agent config based on params
     multi_agent_config = {}
@@ -589,77 +603,38 @@ def gen_trainer_from_params(params):
     if not self_play:
         all_policies.append('bc')
 
-    """
-    TODO? create a new policy for each agent. Actually a new policy for each alg type. Is this the case because PPO will just play with itself so they will have the same policy?
-    Is it the same for MADDPG? In the sense that we only have MADDPG as a policy and all agents have the same policy?
-    """
-    multi_agent_config['policies'] = { policy : gen_policy(policy) for policy in all_policies }
+    multi_agent_config['policies'] = {policy: gen_policy(policy) for policy in all_policies}
 
     def select_policy(agent_id):
         if agent_id.startswith('ppo'):
             return 'ppo'
         if agent_id.startswith('bc'):
             return 'bc'
+
     multi_agent_config['policy_mapping_fn'] = select_policy
-    # TODO? would we have maddpg? Or is it just DDPG? Or?
     multi_agent_config['policies_to_train'] = 'ppo'
 
-    # TODO? what is outer_shape?
+
     if "outer_shape" not in environment_params:
         environment_params["outer_shape"] = None
 
     if "mdp_params" in environment_params:
         environment_params["eval_mdp_params"] = environment_params["mdp_params"]
-    '''
-    So far:
-        - the multiagent config contains the policies
-        - the policies are either PPO or BC, depending on how we want to train it
-        - then everything is passed to a PPO trainer. Why?
-            - BC does not need any training, right? So why do we pass it as well? Is it just the training partner?
-    We can subsitute the PPOTrainer for the MADDPGTrainer, but what will that give?
-        - need to compare if they both take the same parameters
-        PPOTrainer = build_trainer(
-            name="PPO",
-            default_config=DEFAULT_CONFIG,
-            default_policy=PPOTFPolicy,
-            get_policy_class=get_policy_class,
-            make_policy_optimizer=choose_policy_optimizer,
-            --- validate_config=validate_config, -----------------------> diff
-            after_optimizer_step=update_kl,
-            after_train_result=warn_about_bad_reward_scales)
-        
-        MADDPGTrainer = GenericOffPolicyTrainer.with_updates(
-            name="MADDPG",
-            default_config=DEFAULT_CONFIG,
-            --- default_policy=MADDPGTFPolicy, -----------------------> maybe we can change this policy to PPO?
-            get_policy_class=None,
-            --- before_init=None, -----------------------> diff
-            --- before_train_step=set_global_timestep,-----------------------> diff
-            make_policy_optimizer=make_optimizer,
-            after_train_result=add_trainer_metrics,
-            --- collect_metrics_fn=collect_metrics, -----------------------> diff
-            --- before_evaluate_fn=None) -----------------------> diff
-        
-    TODO?:
-        How do they know what parameters to put in the PPOTrainer class? There is no env or config when you go to it
-        
-        I understand that for PPO they implemented their own version and they get it through "custom_model" in "gen_policy"
-        However, how do they do it through BC? I don't see any new model, I only see them importing a policy model from RLLib. They do 
-        use some kind of model when they train the agent in "train_bc_model" which comes from "build_bc_model" which calls "_build_model"
-        which in turn creates a Keras Model
-    TODO! Make this into a MADDPG
-    '''
-    trainer = PPOTrainer(env="overcooked_multi_agent", config={
-        "multiagent": multi_agent_config,  # TODO? It is this place where they use their own implementation of the model
-        "callbacks" : TrainingCallbacks,
-        "custom_eval_function" : get_rllib_eval_function(evaluation_params, environment_params['eval_mdp_params'], environment_params['env_params'],
-                                        environment_params["outer_shape"], 'ppo', 'ppo' if self_play else 'bc',
-                                        verbose=params['verbose'], train_maddpg=False),
-        "env_config" : environment_params,
-        "eager" : False,
+
+    Trainer = CCTrainer if cc else PPOTrainer
+
+    return Trainer(env="overcooked_multi_agent", config={
+        "multiagent": multi_agent_config,
+        "callbacks": TrainingCallbacks,
+        "custom_eval_function": get_rllib_eval_function(evaluation_params, environment_params['eval_mdp_params'],
+                                                        environment_params['env_params'],
+                                                        environment_params["outer_shape"], 'ppo',
+                                                        'ppo' if self_play else 'bc',
+                                                        verbose=params['verbose'], train_maddpg=False),
+        "env_config": environment_params,
+        "eager": False,
         **training_params
     }, logger_creator=custom_logger_creator)
-    return trainer
 
 def gen_maddpg_trainer_from_params(params):
     # All ray environment set-up

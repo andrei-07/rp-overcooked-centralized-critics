@@ -129,9 +129,9 @@ def my_config():
     vf_loss_coeff = 0.5
 
     # Entropy bonus coefficient, will anneal linearly from _start to _end over _horizon steps
-    entropy_coeff_start = 0.2
+    entropy_coeff_start = 0.4
     entropy_coeff_end = 0.1
-    entropy_coeff_horizon = 3e5
+    entropy_coeff_horizon = 0.7e6
 
     # Initial coefficient for KL divergence.
     kl_coeff = 0.2
@@ -215,7 +215,7 @@ def my_config():
     reward_shaping_factor = 1.0
 
     # Linearly anneal the reward shaping factor such that it reaches zero after this number of timesteps
-    reward_shaping_horizon = float('inf')  # 4000000 # 2,500,000.0
+    reward_shaping_horizon = 2.5e6  # 4000000 # 2,500,000.0
 
     # bc_factor represents that ppo agent gets paired with a bc agent for any episode
     # schedule for bc_factor is represented by a list of points (t_i, v_i) where v_i represents the 
@@ -351,6 +351,8 @@ def run(params):
 
 @ex.automain
 def main(params):
+    params['cc'] = True
+
     # List of each random seed to run
     seeds = params['seeds']
     del params['seeds']

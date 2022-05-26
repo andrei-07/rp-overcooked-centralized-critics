@@ -17,7 +17,6 @@ class RllibPPOModel(TFModelV2):
         # params we got to pass in from the call to "run"
         custom_params = model_config["custom_options"]
 
-
         ## Parse custom network params
         num_hidden_layers = custom_params["NUM_HIDDEN_LAYERS"]
         size_hidden_layers = custom_params["SIZE_HIDDEN_LAYERS"]
