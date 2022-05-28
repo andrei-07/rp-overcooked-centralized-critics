@@ -54,28 +54,29 @@ class CentralizedCriticModel(TFModelV2):
         self.register_variables(self.model.variables())
 
         # Central VF maps (obs, opp_obs, opp_act) -> vf_pred
-        obs = tf.keras.layers.Input(shape=(6, ), name="obs")
-        opp_obs = tf.keras.layers.Input(shape=(6, ), name="opp_obs")
-        opp_act = tf.keras.layers.Input(shape=(2, ), name="opp_act")
+        obs = tf.keras.layers.Input(shape=obs_space.shape, name="obs")
+        opp_obs = tf.keras.layers.Input(shape=obs_space.shape, name="opp_obs")
+        opp_act = tf.keras.layers.Input(shape=(6, ), name="opp_act")
         concat_obs = tf.keras.layers.Concatenate(axis=1)(
             [obs, opp_obs, opp_act])
         central_vf_dense = tf.keras.layers.Dense(
-            16, activation=tf.nn.tanh, name="c_vf_dense")(concat_obs)
+            64, activation=tf.nn.relu, name="c_vf_dense")(concat_obs)
+        central_vf_dense2 = tf.keras.layers.Dense(
+            16, activation=tf.nn.relu, name="c_vf_dense2")(central_vf_dense)
         central_vf_out = tf.keras.layers.Dense(
-            1, activation=None, name="c_vf_out")(central_vf_dense)
+            1, activation=None, name="c_vf_out")(central_vf_dense2)
         self.central_vf = tf.keras.Model(
             inputs=[obs, opp_obs, opp_act], outputs=central_vf_out)
         self.register_variables(self.central_vf.variables)
 
     def forward(self, input_dict, state, seq_lens):
-        print("hello")
         return self.model.forward(input_dict, state, seq_lens)
 
     def central_value_function(self, obs, opponent_obs, opponent_actions):
         return tf.reshape(
             self.central_vf(
                 [obs, opponent_obs,
-                 tf.one_hot(opponent_actions, 2)]), [-1])
+                 tf.one_hot(opponent_actions, 6)]), [-1])
 
     def value_function(self):
         return self.model.value_function()  # not used

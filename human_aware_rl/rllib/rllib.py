@@ -791,7 +791,7 @@ def save_trainer(trainer, params, path=None):
         dill.dump(config, f)
     return save_path
 
-def load_trainer(save_path):
+def load_trainer(save_path, cc):
     """
     Returns a ray compatible trainer object that was previously saved at `save_path` by a call to `save_trainer`
     Note that `save_path` is the full path to the checkpoint FILE, not the checkpoint directory
@@ -804,7 +804,7 @@ def load_trainer(save_path):
     
     # Override this param to lower overhead in trainer creation
     config['training_params']['num_workers'] = 0
-
+    config['cc'] = cc
     # Get un-trained trainer object with proper config
     trainer = gen_trainer_from_params(config)
 
@@ -825,15 +825,15 @@ def get_agent_pair_from_trainer(trainer, policy_id_0='ppo', policy_id_1='ppo'):
     return AgentPair(agent0, agent1)
 
 
-def load_agent_pair(save_path, policy_id_0='ppo', policy_id_1='ppo'):
+def load_agent_pair(save_path, policy_id_0='ppo', policy_id_1='ppo', cc=False):
     """
     Returns an Overcooked AgentPair object that has as player 0 and player 1 policies with 
     ID policy_id_0 and policy_id_1, respectively
     """
-    trainer = load_trainer(save_path)
+    trainer = load_trainer(save_path, cc)
     return get_agent_pair_from_trainer(trainer, policy_id_0, policy_id_1)
 
-def load_agent(save_path, policy_id='ppo', agent_index=0):
+def load_agent(save_path, policy_id='ppo', agent_index=0, cc=False):
     """
     Returns an RllibAgent (compatible with the Overcooked Agent API) from the `save_path` to a previously
     serialized trainer object created with `save_trainer`
@@ -844,5 +844,5 @@ def load_agent(save_path, policy_id='ppo', agent_index=0):
     Agent index indicates whether the agent is player zero or player one (or player n in the general case)
     as the featurization is not symmetric for both players
     """
-    trainer = load_trainer(save_path)
+    trainer = load_trainer(save_path, cc)
     return get_agent_from_trainer(trainer, policy_id=policy_id, agent_index=agent_index)

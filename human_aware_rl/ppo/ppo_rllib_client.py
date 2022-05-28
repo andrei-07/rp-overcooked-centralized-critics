@@ -215,7 +215,7 @@ def my_config():
     reward_shaping_factor = 1.0
 
     # Linearly anneal the reward shaping factor such that it reaches zero after this number of timesteps
-    reward_shaping_horizon = 2.5e6  # 4000000 # 2,500,000.0
+    reward_shaping_horizon = float('inf')  # 4000000 # 2,500,000.0
 
     # bc_factor represents that ppo agent gets paired with a bc agent for any episode
     # schedule for bc_factor is represented by a list of points (t_i, v_i) where v_i represents the 
