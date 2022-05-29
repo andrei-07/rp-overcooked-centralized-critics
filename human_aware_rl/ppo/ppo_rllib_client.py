@@ -95,7 +95,7 @@ def my_config():
 
     # size of minibatches we divide up each batch into before
     # performing gradient steps
-    sgd_minibatch_size = 2000 if not LOCAL_TESTING else 800
+    sgd_minibatch_size = 2000 if not LOCAL_TESTING else 800 # [2000, 4000]
 
     # Rollout length
     rollout_fragment_length = 400
@@ -107,7 +107,7 @@ def my_config():
     num_training_iters = 500 if not LOCAL_TESTING else 4
 
     # Stepsize of SGD.
-    lr = 0.001
+    lr = 0.001  # [0.01, 0.001, 0.0005]
 
     # Learning rate schedule.
     lr_schedule = None
@@ -116,32 +116,32 @@ def my_config():
     grad_clip = 0.05
 
     # Discount factor
-    gamma = 0.99
+    gamma = 0.99 # [0.8, 0.9, 0.99]
 
     # Exponential decay factor for GAE (how much weight to put on monte carlo samples)
     # Reference: https://arxiv.org/pdf/1506.02438.pdf
-    lmbda = 0.98
+    lmbda = 0.98 # [0.9, 0.95, 0.99]
 
     # Whether the value function shares layers with the policy model
     vf_share_layers = True
 
     # How much the loss of the value network is weighted in overall loss
-    vf_loss_coeff = 0.5
+    vf_loss_coeff = 0.5 # [0.5, 1]
 
     # Entropy bonus coefficient, will anneal linearly from _start to _end over _horizon steps
-    entropy_coeff_start = 0.4
+    entropy_coeff_start = 0.2
     entropy_coeff_end = 0.1
     entropy_coeff_horizon = 0.7e6
 
     # Initial coefficient for KL divergence.
-    kl_coeff = 0.2
+    kl_coeff = 0.2 # [0.5, 0.8]
 
     # PPO clipping factor
-    clip_param = 0.05
+    clip_param = 0.05 # [0.1,0.2]
 
     # Number of SGD iterations in each outer loop (i.e., number of epochs to
     # execute per train batch).
-    num_sgd_iter = 8 if not LOCAL_TESTING else 1
+    num_sgd_iter = 8 if not LOCAL_TESTING else 1  # [16]
 
     # How many trainind iterations (calls to trainer.train()) to run before saving model checkpoint
     save_freq = 25
@@ -323,6 +323,17 @@ def my_config():
     }
 
 
+tune_params = [
+    ("sgd_minibatch_size", 400),
+    ("lr", 0.1),
+    ("gamma", 0.9),
+    ("lambda", 0.95),
+    ("vf_loss_coeff", 1),
+    ("kl_coeff", 0.5),
+    ("clip_param", 0.1),
+    ("num_sgd_iter", 16)
+]
+
 def run(params):
     # Retrieve the tune.Trainable object that is used for the experiment
     trainer = gen_trainer_from_params(params)
@@ -351,7 +362,7 @@ def run(params):
 
 @ex.automain
 def main(params):
-    params['cc'] = True
+    params['cc'] = False
 
     # List of each random seed to run
     seeds = params['seeds']
@@ -360,7 +371,7 @@ def main(params):
     # List to store results dicts (to be passed to sacred slack observer)
     results = []
 
-    # Train an agent to completion for each random seed specified
+    # baseline
     for seed in seeds:
         # Override the seed
         params['training_params']['seed'] = seed
@@ -368,6 +379,22 @@ def main(params):
         # Do the thing
         result = run(params)
         results.append(result)
+
+    # Train an agent to completion for each random seed specified
+    for param in tune_params:
+        prev_value = params['training_params'][param[0]]
+        params['training_params'][param[0]] = param[1]
+
+        for seed in seeds:
+            # Override the seed
+            params['training_params']['seed'] = seed
+
+            # Do the thing
+            result = run(params)
+            results.append(result)
+
+        params['training_params'][param[0]] = prev_value
+
     for res in results:
         print(res['custom_metrics'])
     # Return value gets sent to our slack observer for notification
