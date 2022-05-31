@@ -4,7 +4,7 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.compat.v1.keras.backend import set_session, get_session
 from human_aware_rl.human.process_dataframes import get_trajs_from_data, get_human_human_trajectories
-from human_aware_rl.static import CLEAN_2019_HUMAN_DATA_TRAIN
+from human_aware_rl.static import CLEAN_2019_HUMAN_DATA_TRAIN, CLEAN_2019_HUMAN_DATA_ALL
 from human_aware_rl.rllib.rllib import RlLibAgent, softmax, evaluate, get_base_ae
 from human_aware_rl.data_dir import DATA_DIR
 from human_aware_rl.utils import recursive_dict_update, get_flattened_keys
@@ -22,7 +22,7 @@ DEFAULT_DATA_PARAMS = {
     "layouts": ["cramped_room"],
     "check_trajectories": False,
     "featurize_states" : True,
-    "data_path": CLEAN_2019_HUMAN_DATA_TRAIN
+    "data_path": CLEAN_2019_HUMAN_DATA_ALL
 }
 
 DEFAULT_MLP_PARAMS = {

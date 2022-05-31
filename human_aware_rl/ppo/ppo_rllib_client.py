@@ -104,7 +104,7 @@ def my_config():
     shared_policy = True
 
     # Number of training iterations to run
-    num_training_iters = 500 if not LOCAL_TESTING else 4
+    num_training_iters = 250 if not LOCAL_TESTING else 4
 
     # Stepsize of SGD.
     lr = 0.001  # [0.01, 0.001, 0.0005]
@@ -116,11 +116,11 @@ def my_config():
     grad_clip = 0.05
 
     # Discount factor
-    gamma = 0.99 # [0.8, 0.9, 0.99]
+    gamma = 0.9  # [0.8 - weaker, 0.9 - best, 0.99]
 
     # Exponential decay factor for GAE (how much weight to put on monte carlo samples)
     # Reference: https://arxiv.org/pdf/1506.02438.pdf
-    lmbda = 0.98 # [0.9, 0.95, 0.99]
+    lmbda = 0.9  # [0.9 - better, 0.95 - 2nd, 0.99]
 
     # Whether the value function shares layers with the policy model
     vf_share_layers = True
@@ -134,10 +134,10 @@ def my_config():
     entropy_coeff_horizon = 0.7e6
 
     # Initial coefficient for KL divergence.
-    kl_coeff = 0.2 # [0.5, 0.8]
+    kl_coeff = 0.2  # [0.5, 0.8]
 
     # PPO clipping factor
-    clip_param = 0.05 # [0.1,0.2]
+    clip_param = 0.2  # [0.1 - slightly better than 0.05,0.2]
 
     # Number of SGD iterations in each outer loop (i.e., number of epochs to
     # execute per train batch).
@@ -326,10 +326,10 @@ def my_config():
 tune_params = [
     ("sgd_minibatch_size", 400),
     ("lr", 0.1),
-    ("gamma", 0.9),
-    ("lambda", 0.95),
+    ("gamma", 0.9), # best performing
+    ("lambda", 0.95), # second best
     ("vf_loss_coeff", 1),
-    ("kl_coeff", 0.5),
+    ("kl_coeff", 0.5), # checkpoint
     ("clip_param", 0.1),
     ("num_sgd_iter", 16)
 ]
@@ -381,19 +381,19 @@ def main(params):
         results.append(result)
 
     # Train an agent to completion for each random seed specified
-    for param in tune_params:
-        prev_value = params['training_params'][param[0]]
-        params['training_params'][param[0]] = param[1]
-
-        for seed in seeds:
-            # Override the seed
-            params['training_params']['seed'] = seed
-
-            # Do the thing
-            result = run(params)
-            results.append(result)
-
-        params['training_params'][param[0]] = prev_value
+    # for param in tune_params:
+    #     prev_value = params['training_params'][param[0]]
+    #     params['training_params'][param[0]] = param[1]
+    #
+    #     for seed in seeds:
+    #         # Override the seed
+    #         params['training_params']['seed'] = seed
+    #
+    #         # Do the thing
+    #         result = run(params)
+    #         results.append(result)
+    #
+    #     params['training_params'][param[0]] = prev_value
 
     for res in results:
         print(res['custom_metrics'])

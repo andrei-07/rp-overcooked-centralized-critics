@@ -381,7 +381,7 @@ class TrainingCallbacks(DefaultCallbacks):
         shaped_reward (int) - total reward shaping reward the agent earned this episode
         """
         # Get rllib.OvercookedMultiAgentEnv refernce from rllib wraper
-        print('on_episode_end')
+        #print('on_episode_end')
         env = base_env.get_unwrapped()[0]
         # Both agents share the same info so it doesn't matter whose we use, just use 0th agent's
         info_dict = episode.last_info_for(env.curr_agents[0])

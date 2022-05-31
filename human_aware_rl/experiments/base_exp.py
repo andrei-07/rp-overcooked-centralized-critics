@@ -154,8 +154,47 @@ def evaluate_final():
                                                                                    'display_phi'])))
     return evaluator_results
 
+def evalaute_ultimate():
+    evaluator = get_base_ae(mdp_params, {"horizon": evaluation_params['ep_length'], "num_mdp": 1},
+                            evaluation_params['outer_shape'])
+
+    bc_agent_model, bc_params = load_bc_model(
+        '/Users/andreimija/Documents/University/human_aware_rl/human_aware_rl/imitation/bc_runs/default')
+    agent_0_policy = BehaviorCloningPolicy.from_model(bc_agent_model, bc_params, stochastic=True)
+
+    base_ae = _get_base_ae(bc_params)
+    base_env = base_ae.env
+
+    def featurize_fn(state):
+        return base_env.featurize_state_mdp(state)
+
+    bc_agent = RlLibAgent(agent_0_policy, 1, featurize_fn=featurize_fn)
+
+    PPO_path = '/Users/andreimija/ray_results/PPO_cramped_room_False_nw=2_mini=2k_lr=0.001_gamma=0.9_lambda=0.95_vf=0.5_kl=0.2_clip=0.2_sgd=8/checkpoint_250/checkpoint-250'
+    agent_PPO = load_agent(PPO_path, cc=False)
+
+    MAPPO_path = '/Users/andreimija/ray_results/PPO_cramped_room_cc_False_nw=2_mini=2k_lr=0.001_gamma=0.9_lambda=0.95_vf=0.5_kl=0.2_clip=0.2_sgd=8/checkpoint_250/checkpoint-250'
+    agent_MAPPO = load_agent(MAPPO_path, cc=True)
+
+    agent_pairs = [
+        ('ppo_pair', load_agent_pair(PPO_path, cc=False)),
+        ('ppo+bc', AgentPair(agent_PPO, bc_agent)),
+        ('mappo_pair', load_agent_pair(MAPPO_path, cc=True)),
+        ('mappo+bc', AgentPair(agent_MAPPO, bc_agent)),
+    ]
+
+    evaluator_results = []
+    for agent_pair in agent_pairs:
+        evaluator_results.append((agent_pair[0], evaluator.evaluate_agent_pair(agent_pair[1],
+                                                                               num_games=evaluation_params['num_games'],
+                                                                               display=evaluation_params['display'],
+                                                                               display_phi=evaluation_params[
+                                                                                   'display_phi'])))
+
+    return evaluator_results
+
 if __name__ == '__main__':
-    results = evaluate_final()
+    results = evalaute_ultimate()
     for result in results:
         print(result[1].keys())
         print('Avg mean for ' + result[0], np.mean(result[1]['ep_returns']))
