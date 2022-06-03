@@ -16,10 +16,12 @@ from ray.rllib.policy import Policy as RllibPolicy
 # Configuration #
 #################
 
+LAYOUT = "asymmetric_advantages" # cramped_room' #
+
 BC_SAVE_DIR = os.path.join(DATA_DIR, "bc_runs")
 
 DEFAULT_DATA_PARAMS = {
-    "layouts": ["cramped_room"],
+    "layouts": [LAYOUT],
     "check_trajectories": False,
     "featurize_states" : True,
     "data_path": CLEAN_2019_HUMAN_DATA_ALL
@@ -51,7 +53,7 @@ DEFAULT_BC_PARAMS = {
     "use_lstm" : False,
     "cell_size" : 256,
     "data_params": DEFAULT_DATA_PARAMS,
-    "mdp_params": {'layout_name': "cramped_room"},
+    "mdp_params": {'layout_name': LAYOUT},
     "env_params": DEFAULT_ENV_PARAMS,
     "mdp_fn_params": {},
     "mlp_params" : DEFAULT_MLP_PARAMS,
@@ -538,6 +540,6 @@ class BehaviorCloningPolicy(RllibPolicy):
 
 if __name__ == "__main__":
     params = get_bc_params()
-    model = train_bc_model(os.path.join(BC_SAVE_DIR, 'default'), params, verbose=True)
+    model = train_bc_model(os.path.join(BC_SAVE_DIR, 'default', LAYOUT), params, verbose=True)
     # Evaluate our model's performance in a rollout
     evaluate_bc_model(model, params)

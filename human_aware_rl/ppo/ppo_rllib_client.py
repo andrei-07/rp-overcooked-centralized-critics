@@ -81,7 +81,7 @@ def my_config():
     num_workers = 2 if not LOCAL_TESTING else 2
 
     # list of all random seeds to use for experiments, used to reproduce results
-    seeds = [0]
+    seeds = [2229, 7649, 7225]  #, 9807,  386]
 
     # Placeholder for random for current trial
     seed = None
@@ -104,7 +104,7 @@ def my_config():
     shared_policy = True
 
     # Number of training iterations to run
-    num_training_iters = 250 if not LOCAL_TESTING else 4
+    num_training_iters = 165 if not LOCAL_TESTING else 4
 
     # Stepsize of SGD.
     lr = 0.001  # [0.01, 0.001, 0.0005]
@@ -182,18 +182,22 @@ def my_config():
 
     ### Environment Params ###
     # Which overcooked level to use
-    layout_name = "cramped_room"
+    layout_name = "asymmetric_advantages"  #"cramped_room"  # next -> asymmetric_advantages
 
     # all_layout_names = '_'.join(layout_names)
 
     # Name of directory to store training results in (stored in ~/ray_results/<experiment_name>)
 
-    params_str = str(use_phi) + "_nw=%d_vf=%f_es=%f_en=%f_kl=%f" % (
+    params_str = str(use_phi) + "_nw=%d_mini_bs=%d_lr=%f_gamma=%f_lambda=%f_vf=%f_kl=%f_clip=%f_sgd=%d" % (
         num_workers,
+        sgd_minibatch_size,
+        lr,
+        gamma,
+        lmbda,
         vf_loss_coeff,
-        entropy_coeff_start,
-        entropy_coeff_end,
-        kl_coeff
+        kl_coeff,
+        clip_param,
+        num_sgd_iter,
     )
 
     experiment_name = "{0}_{1}_{2}".format("PPO", layout_name, params_str)
