@@ -52,8 +52,10 @@ def load_experiments(args):
 
     experiments = dict()
 
-    for index in range(0, len(args), 2):
+    for index in range(0, len(args), 4):
         directory = args[index + 1]
+        directory2 = args[index + 2]
+        directory3 = args[index + 3]
         runs = []
 
         if not os.path.isdir(directory):
@@ -70,10 +72,21 @@ def load_experiments(args):
         #             runs.append(data)
 
         data = pandas.read_csv(os.path.join(directory, "progress.csv"))
+        data2 = pandas.read_csv(os.path.join(directory2, "progress.csv"))
+        data3 = pandas.read_csv(os.path.join(directory3, "progress.csv"))
 
+        data_inter = data.add(data2, fill_value=0)
+        data_final = data_inter.add(data3, fill_value=0)
+        for col in data_final.columns:
+            #print(type(data_final[col].values[0]))
+            #print(data_final[col])
+            #print(type(data_final[col].values[0]) == int or type(data_final[col].values[0]) == float)
+            if type(data_final[col].values[0]) == np.int64 or type(data_final[col].values[0]) == np.float64:
+                data_final[col] = data_final[col] / 3
+            #print(data_final[col])
         # Filter out empy data series
-        if data.shape[0] > 0:
-            runs.append(data)
+        if data_final.shape[0] > 0:
+            runs.append(data_final)
         alg_name = args[index]
         experiments[alg_name + str(index) if alg_name in experiments else alg_name] = runs
 
@@ -93,7 +106,7 @@ if __name__ == "__main__":
     y_max = -np.infty
 
     plot.clf()
-    fig, axs = plot.subplots(1, 2, figsize=(12,4))
+    fig, axs = plot.subplots(1, 3, figsize=(16,4))
 
     for index, (label, runs) in enumerate(experiments.items()):
         #print(index, label, runs)
@@ -197,5 +210,6 @@ if __name__ == "__main__":
         ax.set_ylim(bottom=y_min, top=y_max)
     axs[0].set_title("Cramped Room")
     axs[1].set_title("Asymmetric Advantages")
+    axs[2].set_title("Coordination Ring")
     fig.suptitle(args.title)
     fig.savefig(args.output, bbox_inches="tight")

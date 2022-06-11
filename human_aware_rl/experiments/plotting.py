@@ -14,24 +14,24 @@ def simple_plot(result):
     #     }
     # }
 
-    layouts = ['Cramped rm.', 'Asymm. Adv.']
+    layouts = ['Cramped rm.', 'Asymm. Adv.', 'Coord. Ring']
 
     # set width of bar
     barWidth = 0.2
-    fig = plt.subplots(figsize=(12, 8))
+    fig = plt.subplots(figsize=(16, 8))
 
     # set height of bar
-    PPO_PPO = [result['cr']['ppo'][0][0], result['aa']['ppo'][0][0]]
-    PPO_PPO_std = [result['cr']['ppo'][0][1], result['aa']['ppo'][0][1]]
+    PPO_PPO = [result['cr']['ppo'][0][0], result['aa']['ppo'][0][0], result['cc']['ppo'][0][0]]
+    PPO_PPO_std = [result['cr']['ppo'][0][1], result['aa']['ppo'][0][1], result['cc']['ppo'][0][1]]
 
-    PPO_BC = [result['cr']['ppo'][1][0], result['aa']['ppo'][1][0]]
-    PPO_BC_std = [result['cr']['ppo'][1][1], result['aa']['ppo'][1][1]]
+    PPO_BC = [result['cr']['ppo'][1][0], result['aa']['ppo'][1][0], result['cc']['ppo'][1][0]]
+    PPO_BC_std = [result['cr']['ppo'][1][1], result['aa']['ppo'][1][1], result['cc']['ppo'][1][1]]
 
-    MAPPO_MAPPO = [result['cr']['mappo'][0][0], result['aa']['mappo'][0][0]]
-    MAPPO_MAPPO_std = [result['cr']['mappo'][0][1], result['aa']['mappo'][0][1]]
+    MAPPO_MAPPO = [result['cr']['mappo'][0][0], result['aa']['mappo'][0][0], result['cc']['mappo'][0][0]]
+    MAPPO_MAPPO_std = [result['cr']['mappo'][0][1], result['aa']['mappo'][0][1], result['cc']['mappo'][0][1]]
 
-    MAPPO_BC = [result['cr']['mappo'][1][0], result['aa']['mappo'][1][0]]
-    MAPPO_BC_std = [result['cr']['mappo'][1][1], result['aa']['mappo'][1][1]]
+    MAPPO_BC = [result['cr']['mappo'][1][0], result['aa']['mappo'][1][0], result['cc']['mappo'][1][0]]
+    MAPPO_BC_std = [result['cr']['mappo'][1][1], result['aa']['mappo'][1][1], result['cc']['mappo'][1][1]]
 
     # Set position of bar on X axis
     br1 = np.arange(len(layouts))

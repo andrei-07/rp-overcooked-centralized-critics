@@ -1,3 +1,4 @@
+import json
 import os
 
 from human_aware_rl.experiments.plotting import simple_plot
@@ -50,6 +51,7 @@ def evalaute_ultimate():
 
     cr_bc, cr_evaluator = create_bc_agent_and_evaluator('cramped_room')
     aa_bc, aa_evaluator = create_bc_agent_and_evaluator('asymmetric_advantages')
+    cc_bc, cc_evaluator = create_bc_agent_and_evaluator('coordination_ring')
 
     ppo_cr_2229 = '/Users/andreimija/ray_results/PPO_cramped_room_False_nw=2_mini_bs=2000_lr=0.001_gamma=0.9_lambda=0.9_vf=0.5_kl=0.2_clip=0.2_sgd=8_2229_2022-05-31_seed=2229/checkpoint_165/checkpoint-165'
     ppo_cr_7225 = '/Users/andreimija/ray_results/PPO_cramped_room_False_nw=2_mini_bs=2000_lr=0.001_gamma=0.9_lambda=0.9_vf=0.5_kl=0.2_clip=0.2_sgd=8_2229_2022-05-31_seed=7225/checkpoint_165/checkpoint-165'
@@ -67,10 +69,20 @@ def evalaute_ultimate():
     mappo_aa_7225 = '/Users/andreimija/ray_results/PPO_asymmetric_advantages_False_nw=2_mini_bs=2000_lr=0.001_gamma=0.9_lambda=0.9_vf=0.5_kl=0.2_clip=0.2_sgd=8_2229_2022-05-31_seed=7225_cc/checkpoint_165/checkpoint-165'
     mappo_aa_7649 = '/Users/andreimija/ray_results/PPO_asymmetric_advantages_False_nw=2_mini_bs=2000_lr=0.001_gamma=0.9_lambda=0.9_vf=0.5_kl=0.2_clip=0.2_sgd=8_2229_2022-05-31_seed=7649_cc/checkpoint_165/checkpoint-165'
 
+    ppo_cc_2229 = '/Users/andreimija/ray_results/PPO_coordination_ring_False_nw=2_mini_bs=2000_lr=0.001_gamma=0.9_lambda=0.9_vf=0.5_kl=0.2_clip=0.2_sgd=8_2229_2022-05-31_seed=2229/checkpoint_165/checkpoint-165'
+    ppo_cc_7225 = '/Users/andreimija/ray_results/PPO_coordination_ring_False_nw=2_mini_bs=2000_lr=0.001_gamma=0.9_lambda=0.9_vf=0.5_kl=0.2_clip=0.2_sgd=8_2229_2022-05-31_seed=7225/checkpoint_165/checkpoint-165'
+    ppo_cc_7649 = '/Users/andreimija/ray_results/PPO_coordination_ring_False_nw=2_mini_bs=2000_lr=0.001_gamma=0.9_lambda=0.9_vf=0.5_kl=0.2_clip=0.2_sgd=8_2229_2022-05-31_seed=7649/checkpoint_165/checkpoint-165'
+
+    mappo_cc_2229 = '/Users/andreimija/ray_results/PPO_coordination_ring_False_nw=2_mini_bs=2000_lr=0.001_gamma=0.9_lambda=0.9_vf=0.5_kl=0.2_clip=0.2_sgd=8_2229_2022-05-31_seed=2229_cc/checkpoint_165/checkpoint-165'
+    mappo_cc_7225 = '/Users/andreimija/ray_results/PPO_coordination_ring_False_nw=2_mini_bs=2000_lr=0.001_gamma=0.9_lambda=0.9_vf=0.5_kl=0.2_clip=0.2_sgd=8_2229_2022-05-31_seed=7225_cc/checkpoint_165/checkpoint-165'
+    mappo_cc_7649 = '/Users/andreimija/ray_results/PPO_coordination_ring_False_nw=2_mini_bs=2000_lr=0.001_gamma=0.9_lambda=0.9_vf=0.5_kl=0.2_clip=0.2_sgd=8_2229_2022-05-31_seed=7649_cc/checkpoint_165/checkpoint-165'
+
     ppo_cr = [ppo_cr_2229, ppo_cr_7225, ppo_cr_7649]
     mappo_cr = [mappo_cr_2229, mappo_cr_7225, mappo_cr_7649]
     ppo_aa = [ppo_aa_2229, ppo_aa_7225, ppo_aa_7649]
     mappo_aa = [mappo_aa_2229, mappo_aa_7225, mappo_aa_7649]
+    ppo_cc = [ppo_cc_2229, ppo_cc_7225, ppo_cc_7649]
+    mappo_cc = [mappo_cc_2229, mappo_cc_7225, mappo_cc_7649]
 
     rooms = {
         'cr': {
@@ -80,6 +92,10 @@ def evalaute_ultimate():
         'aa': {
             'ppo': ppo_aa,
             'mappo': mappo_aa
+        },
+        'cc': {
+            'ppo': ppo_cc,
+            'mappo': mappo_cc
         }
     }
 
@@ -91,13 +107,19 @@ def evalaute_ultimate():
         'aa': {
             'ppo': [],
             'mappo': [],
+        },
+        'cc': {
+            'ppo': [],
+            'mappo': [],
         }
     }
 
     for room in rooms:
+        print("starting room " + room)
         cc = False
-        bc_agent, evaluator = (cr_bc, cr_evaluator) if room == 'cr' else (aa_bc, aa_evaluator)
+        bc_agent, evaluator = (cr_bc, cr_evaluator) if room == 'cr' else (aa_bc, aa_evaluator) if room == 'aa' else (cc_bc, cc_evaluator)
         for agent_alg_key in rooms[room]:
+            print("starting alg " + agent_alg_key + " in room " + room + str(cc))
             agent_alg = rooms[room][agent_alg_key]
             bc_res_mean = [0, 0, 0]
             sp_res_mean = [0, 0, 0]
@@ -107,7 +129,7 @@ def evalaute_ultimate():
 
                 agent_bc_pair = AgentPair(agent, bc_agent)
                 agent_pair = load_agent_pair(agent_seed, cc=cc)
-
+                print("starting bc with alg " + agent_alg_key + " in room " + room + str(cc))
                 bc_local_res = evaluator.evaluate_agent_pair(agent_bc_pair,
                                               num_games=evaluation_params['num_games'],
                                               display=evaluation_params['display'],
@@ -119,7 +141,7 @@ def evalaute_ultimate():
                 bc_res_mean[0] += avg_rew
                 bc_res_mean[1] += std
                 bc_res_mean[2] += se
-
+                print("starting sp with alg " + agent_alg_key + " in room " + room + str(cc))
                 sp_local_res = evaluator.evaluate_agent_pair(agent_pair,
                                                        num_games=evaluation_params['num_games'],
                                                        display=evaluation_params['display'],
@@ -136,6 +158,9 @@ def evalaute_ultimate():
             print(room_res[room][agent_alg_key][0])
             print(room_res[room][agent_alg_key][0][0])
             cc = True
+
+    with open("resultss.json", "w") as write_file:
+        json.dump(room_res, write_file, indent=4)
 
     return room_res
 

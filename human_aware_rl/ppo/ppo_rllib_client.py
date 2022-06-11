@@ -182,7 +182,7 @@ def my_config():
 
     ### Environment Params ###
     # Which overcooked level to use
-    layout_name = "asymmetric_advantages"  #"cramped_room"  # next -> asymmetric_advantages
+    layout_name = "coordination_ring"  #"cramped_room"  # next -> asymmetric_advantages
 
     # all_layout_names = '_'.join(layout_names)
 
@@ -366,7 +366,7 @@ def run(params):
 
 @ex.automain
 def main(params):
-    params['cc'] = False
+    params['cc'] = True
 
     # List of each random seed to run
     seeds = params['seeds']

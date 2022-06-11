@@ -16,7 +16,7 @@ from ray.rllib.policy import Policy as RllibPolicy
 # Configuration #
 #################
 
-LAYOUT = "asymmetric_advantages" # cramped_room' #
+LAYOUT = 'coordination_ring' #"asymmetric_advantages" # cramped_room' #
 
 BC_SAVE_DIR = os.path.join(DATA_DIR, "bc_runs")
 
