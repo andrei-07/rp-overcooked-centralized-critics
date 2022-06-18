@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -50,14 +52,16 @@ def simple_plot(result):
             edgecolor='grey', label='MAPPO+BC')
 
     # Adding Xticks
-    plt.xlabel('Layout name', fontsize=15)
-    plt.xticks([r + barWidth for r in range(len(layouts))], layouts)
-    plt.ylabel('Average reward per episode', fontsize=15)
-    plt.title('Performance with human proxy model', fontsize=25)
+    #plt.xlabel('Layout name')
+    plt.xticks([r + barWidth for r in range(len(layouts))], layouts, fontsize=17)
+    plt.ylabel('Average reward per episode', fontsize=20)
+    plt.title('Performance with human proxy model', fontsize=30)
 
-    plt.legend()
+    plt.legend(fontsize=15)
     plt.show()
     plt.savefig('evaluation')
 
 if __name__ == '__main__':
-    simple_plot({})
+    j = open('resultss.json')
+    data = json.load(j)
+    simple_plot(data)

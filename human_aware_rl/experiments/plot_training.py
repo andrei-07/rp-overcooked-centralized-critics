@@ -16,10 +16,6 @@ import numpy as np
 import scipy
 import scipy.stats
 
-# PPO ~/ray_results/PPO_cramped_room_False_nw=2_mini_bs=2000_lr=0.001_gamma=0.9_lambda=0.9_vf=0.5_kl=0.2_clip=0.2_sgd=8_2229_2022-05-31_seed=2229
-# MAPPO ~/ray_results/PPO_cramped_room_False_nw=2_mini_bs=2000_lr=0.001_gamma=0.9_lambda=0.9_vf=0.5_kl=0.2_clip=0.2_sgd=8_2229_2022-05-31_seed=2229_cc
-# PPO ~/ray_results/PPO_asymmetric_advantages_False_nw=2_mini_bs=2000_lr=0.001_gamma=0.9_lambda=0.9_vf=0.5_kl=0.2_clip=0.2_sgd=8_2229_2022-05-31_seed=2229
-# MAPPO ~/ray_results/PPO_asymmetric_advantages_False_nw=2_mini_bs=2000_lr=0.001_gamma=0.9_lambda=0.9_vf=0.5_kl=0.2_clip=0.2_sgd=8_2229_2022-05-31_seed=2229_cc
 def parse_args():
     parser = argparse.ArgumentParser("Generates a plot of a set of RLLib experiments for the specified metrics.")
 # experiments "custom_metrics/sparse_reward_mean ~/ray_results/PPO_cramped_room_False_nw=2_mini=2k_lr=0.001_gamma=0.9_lambda=0.95_vf=0.5_kl=0.2_clip=0.2_sgd=8"
@@ -37,7 +33,7 @@ def parse_args():
                         help="label for the y-axis")
     parser.add_argument("--title", default="Mean Episode Reward during Training", type=str,
                         help="title for the plot to be generated")
-    parser.add_argument("--errors", default="range", type=str,
+    parser.add_argument("--errors", default="error", type=str,
                         help="error values to plot as shaded regions \{'range', 'deviation', 'error', 'None'\}")
     parser.add_argument("--incomplete", default="truncate", type=str,
                         help="how to handle incomplete runs \{'ignore', 'truncate'\}")
@@ -61,16 +57,6 @@ def load_experiments(args):
         if not os.path.isdir(directory):
             raise Exception(f"Experiment directory {directory} does not exist")
 
-        # for obj in os.listdir(directory):
-        #     path = os.path.join(directory, obj)
-        #
-        #     if os.path.isdir(path):
-        #         data = pandas.read_csv(os.path.join(path, "progress.csv"))
-        #
-        #         # Filter out empy data series
-        #         if data.shape[0] > 0:
-        #             runs.append(data)
-
         data = pandas.read_csv(os.path.join(directory, "progress.csv"))
         data2 = pandas.read_csv(os.path.join(directory2, "progress.csv"))
         data3 = pandas.read_csv(os.path.join(directory3, "progress.csv"))
@@ -78,17 +64,17 @@ def load_experiments(args):
         data_inter = data.add(data2, fill_value=0)
         data_final = data_inter.add(data3, fill_value=0)
         for col in data_final.columns:
-            #print(type(data_final[col].values[0]))
-            #print(data_final[col])
-            #print(type(data_final[col].values[0]) == int or type(data_final[col].values[0]) == float)
             if type(data_final[col].values[0]) == np.int64 or type(data_final[col].values[0]) == np.float64:
                 data_final[col] = data_final[col] / 3
-            #print(data_final[col])
         # Filter out empy data series
         if data_final.shape[0] > 0:
             runs.append(data_final)
         alg_name = args[index]
-        experiments[alg_name + str(index) if alg_name in experiments else alg_name] = runs
+
+        col = 'custom_metrics/sparse_reward_mean'
+        mse = scipy.stats.sem([data[col], data2[col], data3[col]], axis=0, ddof=1)
+
+        experiments[alg_name + str(index) if alg_name in experiments else alg_name] = (runs, mse)
 
     return experiments
 
@@ -108,8 +94,7 @@ if __name__ == "__main__":
     plot.clf()
     fig, axs = plot.subplots(1, 3, figsize=(16,4))
 
-    for index, (label, runs) in enumerate(experiments.items()):
-        #print(index, label, runs)
+    for index, (label, (runs, mse)) in enumerate(experiments.items()):
         i = int(index/2)
         if len(runs) > 0:
             lengths = [len(run) for run in runs]
@@ -157,18 +142,13 @@ if __name__ == "__main__":
                 upper = means + std
                 lower = means - std
             elif "error" == args.errors:
-                error = scipy.stats.sem(series, axis=0, ddof=1)
-                upper = means + error
-                lower = means - error
+                upper = means + mse
+                lower = means - mse
             else:
                 upper = means
                 lower = means
-
-            # Plot series
             axs[i].plot(x_axis, means, color=color_map[2 * index - i * 4], alpha=1.0)
             axs[i].fill_between(x_axis, lower, upper, color=color_map[2 * index - i * 4 + 1], alpha=0.3)
-            # plot.plot(x_axis, means, color=color_map[2 * index], alpha=1.0)
-            # plot.fill_between(x_axis, lower, upper, color=color_map[2 * index + 1], alpha=0.3)
 
         # Add a legend entry even if there were no non-empty data series
         if i < 1:
@@ -191,20 +171,9 @@ if __name__ == "__main__":
         y_min *= 1.2
         y_max *= 1.2
 
-    # plot.legend(handles=legend_entries)
-    # plot.title(args.title)
-    # plot.xlabel(args.x_label)
-    # plot.ylabel(args.y_label)
-    # plot.ylim(bottom=y_min, top=y_max)
-    # plot.savefig(args.output, bbox_inches="tight")
-
     # Create plot
     for ax in axs:
         ax.legend(handles=legend_entries)
-        # ax.xlabel(args.x_label)
-        # ax.ylabel(args.y_label)
-        # ax.ylim(bottom=y_min, top=y_max)
-        # ax.savefig(args.output, bbox_inches="tight")
         ax.set_xlabel(args.x_label)
         ax.set_ylabel(args.y_label)
         ax.set_ylim(bottom=y_min, top=y_max)
