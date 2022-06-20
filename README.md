@@ -1,6 +1,6 @@
 # Human-Aware Reinforcement Learning
 
-This code is based on the work in [On the Utility of Learning about Humans for Human-AI Coordination](https://arxiv.org/abs/1910.05789). 
+This code is based on the work in [On the Utility of Learning about Humans for Human-AI Coordination](https://arxiv.org/abs/1910.05789). It was further adapted for the research in "Multi-Agent Reinforcement Learning using Centralized Critics in Collaborative Environments", a Dissertation Submitted to the EEMCS faculty of the Delft University of Technology for the Bachelor of Computer Science and Engineering.
 
 # Contents
 
